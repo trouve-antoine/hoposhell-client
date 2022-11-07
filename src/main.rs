@@ -1,6 +1,7 @@
 use portable_pty as pty;
 
 use std::{
+    path::Path,
     env,
     thread,
     io::{self, Read, Write},
@@ -23,6 +24,8 @@ enum MessageTypeToStream {
 }
 
 const BUF_SIZE: usize = 256;
+
+const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
 #[derive(Clone, Debug)]
 struct Message<T> {
@@ -58,6 +61,12 @@ fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
 }
 
 fn parse_args() -> Args {
+    let cmd_args: Vec<String> = env::args().collect();
+
+    let shell_name = &cmd_args[1];
+
+    let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(HOPOSHELL_FOLDER_NAME);
+
     let mut args = Args {
         auto_reconnect: false,
         cmd: match env::var("SHELL") {
@@ -69,8 +78,8 @@ fn parse_args() -> Args {
         keep_alive:Duration::from_millis(5000),
         read_timeout: Duration::from_millis(50),
         read_timeout_sleep: Duration::ZERO,
-        server_crt_path: env::var("HOPOSHELL_SERVER_CRT").ok(),
-        shell_key_path: env::var("HOPOSHELL_SHELL_KEY").ok(),
+        server_crt_path: Some(String::from(hoposhell_folder_path.join("server.crt").to_str().unwrap())),
+        shell_key_path: Some(format!("{}/{}.pem", hoposhell_folder_path.to_str().unwrap(), shell_name)),
         verify_crt: true
     };
 
@@ -109,6 +118,16 @@ fn parse_args() -> Args {
     if let Ok(read_timeout_sleep_str) = read_timeout_sleep_str {
         args.read_timeout_sleep = parse_duration_from_ms_str(read_timeout_sleep_str);
     }
+    
+    let server_crt_path_str = env::var("HOPOSHELL_SERVER_CRT");
+    if let Ok(server_crt_path_str) = server_crt_path_str {
+        args.server_crt_path = Some(server_crt_path_str);
+    }
+    
+    let shell_key_path_str = env::var("HOPOSHELL_SHELL_KEY");
+    if let Ok(shell_key_path_str) = shell_key_path_str {
+        args.shell_key_path = Some(shell_key_path_str);
+    }
 
     let verify_crt_str = env::var("VERIFY_CRT");
     if let Ok(verify_crt_str) = verify_crt_str {
@@ -139,6 +158,11 @@ fn make_ssl_conector(server_crt_path: String, shell_key_path: String, verify_crt
     return ssl_builder.build();
 }
 
+fn compute_hostname(server_url: &String) -> &str {
+    let parts: Vec<&str> = server_url.split(":").collect();
+    return parts[0];
+}
+
 fn main() {
     let args = parse_args();
 
@@ -157,6 +181,8 @@ fn main() {
     let tx_to_stream = Arc::clone(&tx_to_stream);
     let _command = run_command(args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
 
+    let hostname = compute_hostname(&args.server_url);
+
     let ssl_connector = if args.use_ssl {
         Some(make_ssl_conector(
             args.server_crt_path.expect("Please specify env var HOPOSHELL_SERVER_CRT"),
@@ -166,7 +192,7 @@ fn main() {
     } else {
         None
     };
-        
+    
     loop {
         println!("Tries to connect to: {}", args.server_url);
         match TcpStream::connect(args.server_url.as_str()) {
@@ -176,7 +202,7 @@ fn main() {
                 tcp_stream.set_read_timeout(Some(args.read_timeout)).expect("Could not set the read timeout of the tcp stream");
 
                 if let Some(ref ssl_connector) = ssl_connector {
-                    let ssl_stream = ssl_connector.connect("localhost", tcp_stream).unwrap();
+                    let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
                     handle_connection(
                         ssl_stream,
                         tx_to_cmd.clone(), rx_stream.clone(),
