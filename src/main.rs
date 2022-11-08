@@ -23,7 +23,7 @@ enum MessageTypeToStream {
     // STDERR, 
 }
 
-const BUF_SIZE: usize = 256;
+const BUF_SIZE: usize = 1024;
 
 const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
@@ -31,7 +31,7 @@ const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 struct Message<T> {
     mtype: T,
     // content: Option<[u8; BUF_SIZE]>
-    content: Option<String>
+    content: Option<Vec<u8>>
 }
 
 fn get_now() -> u128 {
@@ -39,6 +39,10 @@ fn get_now() -> u128 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis()
+}
+
+enum ArgsCommand {
+    CONNECT, SETUP
 }
 
 struct Args {
@@ -51,7 +55,9 @@ struct Args {
     read_timeout_sleep: Duration,
     server_crt_path: Option<String>,
     shell_key_path: Option<String>,
-    verify_crt: bool
+    verify_crt: bool,
+    command: ArgsCommand,
+    shell_name: Option<String>
 }
 
 fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
@@ -63,7 +69,15 @@ fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
 fn parse_args() -> Args {
     let cmd_args: Vec<String> = env::args().collect();
 
-    let shell_name = &cmd_args[1];
+    let mut shell_name: Option<String> = None;
+    let mut command = ArgsCommand::CONNECT;
+    if cmd_args.len() > 1 {    
+        (shell_name, command) = match cmd_args[1].as_str() {
+            "connect" => (Some(cmd_args[2].clone()), ArgsCommand::CONNECT),
+            "setup" => (Some(cmd_args[2].clone()), ArgsCommand::SETUP),
+            _ => (Some(cmd_args[1].clone()), ArgsCommand::CONNECT)
+        };
+    }
 
     let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(HOPOSHELL_FOLDER_NAME);
 
@@ -79,8 +93,12 @@ fn parse_args() -> Args {
         read_timeout: Duration::from_millis(50),
         read_timeout_sleep: Duration::ZERO,
         server_crt_path: Some(String::from(hoposhell_folder_path.join("server.crt").to_str().unwrap())),
-        shell_key_path: Some(format!("{}/{}.pem", hoposhell_folder_path.to_str().unwrap(), shell_name)),
-        verify_crt: true
+        shell_key_path: if let Some(shell_name) = shell_name.as_ref() {
+            Some(format!("{}/{}.pem", hoposhell_folder_path.to_str().unwrap(), shell_name))
+        } else { None },
+        verify_crt: true,
+        command: command,
+        shell_name: shell_name
     };
 
     let reconnect_str = env::var("RECONNECT");
@@ -166,6 +184,25 @@ fn compute_hostname(server_url: &String) -> &str {
 fn main() {
     let args = parse_args();
 
+    match args.command {
+        ArgsCommand::CONNECT => main_connect(args),
+        ArgsCommand::SETUP => main_setup(args)
+    }
+}
+
+fn main_setup(args: Args) {
+    /* */
+    match args.shell_name {
+        Some(shell_name) => {
+            println!("Get credentials for shell {}", shell_name);
+        },
+        None => {
+            eprintln!("Please specify the shell name");
+        }
+    }    
+}
+
+fn main_connect(args: Args) {
     let (tx_to_cmd, rx_cmd) = mpsc::channel::<Message<MessageTypeToCmd>>();
     let tx_to_cmd = Arc::new(Mutex::new(tx_to_cmd));
     let rx_cmd = Arc::new(Mutex::new(rx_cmd));
@@ -261,10 +298,14 @@ fn run_command(
         if let Ok(msg) = rx_cmd.lock().unwrap().recv() {
             if msg.mtype == MessageTypeToCmd::STDIN {
                 if let Some(content) = msg.content {
-                    cmd_stdin.lock().unwrap().write(content.as_bytes()).unwrap();
+                    cmd_stdin.lock().unwrap().write(&content).unwrap();
                 }
             } else if msg.mtype == MessageTypeToCmd::COMMAND {
-                match msg.content.as_deref() {
+                let content = match msg.content.as_deref() {
+                    Some(c) => Some(String::from_utf8_lossy(&c)),
+                    None => None
+                };
+                match content.as_deref() {
                     Some("restart") => { eprintln!("Got restart command"); std::process::exit(0) },
                     Some(c) => eprintln!("Got unknown command: {}", c),
                     None => eprintln!("Got an empty command.")
@@ -278,7 +319,7 @@ fn run_command(
     let tx_to_stream_stdout = Arc::clone(&tx_to_stream);
     let history_of_messages_to_stream_stdout = history_of_messages_to_stream.clone();
     let _stdout_handle = thread::spawn(move || loop {
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; BUF_SIZE];
         match cmd_stdout.lock().unwrap().read(&mut buf) {
             Ok(n) => {
                 if n == 0 {
@@ -287,7 +328,7 @@ fn run_command(
                 }
                 let msg = Message {
                     mtype: MessageTypeToStream::STDOUT,
-                    content: Some(String::from_utf8(buf[0..n].to_vec()).unwrap())
+                    content: Some(buf.to_vec())
                 };
                 history_of_messages_to_stream_stdout.lock().unwrap().push(msg.clone());
                 tx_to_stream_stdout.lock().unwrap().send(msg).unwrap();
@@ -312,7 +353,7 @@ fn handle_connection(
 {
     let header_msg = Message {
         mtype: MessageTypeToStream::HEADER,
-        content: Some(String::from("v1.0"))
+        content: Some("v1.0".as_bytes().to_vec())
     };
     if let Err(_) = send_message_to_stream(&header_msg, &mut stream) {
         eprintln!("Unable to send headers to stream...");
@@ -335,7 +376,7 @@ fn handle_connection(
 
     loop {
         /* Try to read */
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; BUF_SIZE];
         match stream.read(&mut buf) {
             Ok(n) => {
                 if n == 0 {
@@ -458,13 +499,7 @@ fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -
                 // 4 is the length of -eee or -ooo
                 let payload_64: &str = &buf_part[..buf_part.len()-4];
                 let payload = base64::decode(payload_64).unwrap();
-                let payload_str = String::from_utf8(payload).unwrap();
-                let payload_str = payload_str.replace("\n", "\n\r");
-
-                // for content in string_to_buffers(payload_str) {
-                //     messages.push(Message { mtype, content: Some(String::from_utf8(content.to_vec()).unwrap()) });
-                // }
-                messages.push(Message { mtype, content: Some(payload_str) });
+                messages.push(Message { mtype, content: Some(payload) });
             }
         }
     }
