@@ -8,7 +8,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
     net::{TcpStream},
-    sync::mpsc::{self, Sender, Receiver}
+    sync::mpsc::{self, Sender, Receiver}, collections::HashMap
 };
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
@@ -50,6 +50,7 @@ struct Args {
     cmd: String,
     auto_reconnect: bool,
     server_url: String,
+    api_url: String,
     keep_alive: Duration,
     read_timeout: Duration,
     read_timeout_sleep: Duration,
@@ -79,7 +80,10 @@ fn parse_args() -> Args {
         };
     }
 
-    let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(HOPOSHELL_FOLDER_NAME);
+    let hoposhell_folder_name = env::var("HOPOSHELL_HOME_NAME").unwrap_or_else(|_| {
+        String::from_utf8(HOPOSHELL_FOLDER_NAME.as_bytes().to_vec()).unwrap()
+    });
+    let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(hoposhell_folder_name);
 
     let mut args = Args {
         auto_reconnect: false,
@@ -89,6 +93,7 @@ fn parse_args() -> Args {
         },
         use_ssl: true,
         server_url: String::from("api.hoposhell.com:10000"),
+        api_url: String::from("api.hoposhell.com"),
         keep_alive:Duration::from_millis(5000),
         read_timeout: Duration::from_millis(50),
         read_timeout_sleep: Duration::ZERO,
@@ -120,6 +125,11 @@ fn parse_args() -> Args {
     let server_url = env::var("HOPOSHELL_URL");
     if let Ok(server_url) = server_url {
         args.server_url = server_url;
+    }
+    
+    let api_url = env::var("HOPOSHELL_API");
+    if let Ok(api_url) = api_url {
+        args.api_url = api_url;
     }
 
     let keep_alive_ms_str = env::var("KEEP_ALIVE");
@@ -195,11 +205,35 @@ fn main_setup(args: Args) {
     match args.shell_name {
         Some(shell_name) => {
             println!("Get credentials for shell {}", shell_name);
+            get_shell_credentials(
+                shell_name, args.api_url, 
+                args.server_crt_path.unwrap(),
+                args.shell_key_path.unwrap());
         },
         None => {
             eprintln!("Please specify the shell name");
         }
     }    
+}
+
+fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String) {
+    eprintln!("🪙 {}/shell-credentials/request/{}", api_url, shell_name);
+    reqwest::blocking::get(format!("{}/shell-credentials/request/{}", api_url, shell_name)).unwrap();
+    
+    let mut login_code = String::new();
+    println!("Enter the login code that shows on the hoposhell GUI: ");
+    std::io::stdin().read_line(&mut login_code).unwrap();
+    let credentials = reqwest::blocking::get(format!("{}/shell-credentials/confirmation/{}/{}", api_url, shell_name, login_code)).unwrap()
+        .json::<HashMap<String, String>>().unwrap();
+
+    let server_crt = &credentials["serverCrt"];
+    let shell_key = &credentials["shellKey"];
+
+    println!("💾 Write server crt in file {}", server_crt_path);
+    std::fs::write(&server_crt_path, server_crt).expect("Unable to write server crt file");
+    
+    println!("💾 Write shell key in file {}", shell_key_path);
+    std::fs::write(&shell_key_path, shell_key).expect("Unable to write shell key file");
 }
 
 fn main_connect(args: Args) {
