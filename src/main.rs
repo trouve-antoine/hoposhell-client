@@ -42,7 +42,7 @@ fn get_now() -> u128 {
 }
 
 enum ArgsCommand {
-    CONNECT, SETUP
+    CONNECT, SETUP, DOWNLOAD, UPLOAD
 }
 
 struct Args {
@@ -58,7 +58,8 @@ struct Args {
     shell_key_path: Option<String>,
     verify_crt: bool,
     command: ArgsCommand,
-    shell_name: Option<String>
+    shell_name: Option<String>,
+    file_id: Option<String>
 }
 
 fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
@@ -67,17 +68,50 @@ fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
 
 }
 
+/// setup
+/// - hoposhell_client setup <shell id>
+/// connect:
+/// - hoposhell_client <shell id>
+/// - hoposhell_client connect <shell id>
+/// upload (from hoposhell shell)
+/// - hoposhell_client upload <file path>
+/// download (from hoposhell shell)
+/// - hoposhell_client download <file id>
 fn parse_args() -> Args {
     let cmd_args: Vec<String> = env::args().collect();
 
     let mut shell_name: Option<String> = None;
     let mut command = ArgsCommand::CONNECT;
-    if cmd_args.len() > 1 {    
-        (shell_name, command) = match cmd_args[1].as_str() {
-            "connect" => (Some(cmd_args[2].clone()), ArgsCommand::CONNECT),
-            "setup" => (Some(cmd_args[2].clone()), ArgsCommand::SETUP),
-            _ => (Some(cmd_args[1].clone()), ArgsCommand::CONNECT)
-        };
+
+    if let Ok(shell_name_) = env::var("HOPOSHELL_SHELL_ID") {
+        shell_name = Some(shell_name_);
+    }
+
+    let mut file_id: Option<String> = None;
+
+    if cmd_args.len() > 1 {
+        match cmd_args[1].as_str() {
+            "connect" => {
+                shell_name = Some(cmd_args[2].clone());
+                command = ArgsCommand::CONNECT;
+            }
+            "setup" => {
+                shell_name = Some(cmd_args[2].clone());
+                command = ArgsCommand::CONNECT;
+            }
+            "upload" => {
+                file_id = Some(cmd_args[2].clone());
+                command = ArgsCommand::UPLOAD;
+            }
+            "download" => {
+                file_id = Some(cmd_args[2].clone());
+                command = ArgsCommand::DOWNLOAD;
+            }
+            _ => {
+                shell_name = Some(cmd_args[1].clone());
+                command = ArgsCommand::CONNECT;
+            }
+        }
     }
 
     let hoposhell_folder_name = env::var("HOPOSHELL_HOME_NAME").unwrap_or_else(|_| {
@@ -102,8 +136,9 @@ fn parse_args() -> Args {
             Some(format!("{}/{}.pem", hoposhell_folder_path.to_str().unwrap(), shell_name))
         } else { None },
         verify_crt: true,
-        command: command,
-        shell_name: shell_name
+        command,
+        shell_name,
+        file_id
     };
 
     let reconnect_str = env::var("RECONNECT");
@@ -196,7 +231,9 @@ fn main() {
 
     match args.command {
         ArgsCommand::CONNECT => main_connect(args),
-        ArgsCommand::SETUP => main_setup(args)
+        ArgsCommand::SETUP => main_setup(args),
+        ArgsCommand::DOWNLOAD => main_download(args),
+        ArgsCommand::UPLOAD => main_upload(args),
     }
 }
 
@@ -213,7 +250,32 @@ fn main_setup(args: Args) {
         None => {
             eprintln!("Please specify the shell name");
         }
-    }    
+    }
+}
+
+fn main_download(args: Args) {
+    /* */
+    match args.file_id {
+        Some(file_id) => {
+            eprintln!("Will download file with ID {}", file_id);
+        }
+        None => {
+            eprintln!("Please specify the file to download");
+        }
+    }
+}
+
+fn main_upload(args: Args) {
+    /* */
+    match args.file_id {
+        Some(file_path_str) => {
+            let file_path = Path::new(&file_path_str).canonicalize().unwrap();
+            eprintln!("Will upload file at {}", file_path.to_str().unwrap());
+        }
+        None => {
+            eprintln!("Please specify the file to upload");
+        }
+    }
 }
 
 fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String) {
@@ -250,7 +312,7 @@ fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
-    let _command = run_command(args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
+    let _command = run_command(args.shell_name, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
 
     let hostname = compute_hostname(&args.server_url);
 
@@ -304,6 +366,7 @@ fn main_connect(args: Args) {
 }
 
 fn run_command(
+    shell_id: Option<String>,
     cmd: String,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
     rx_cmd: Arc<Mutex<Receiver<Message<MessageTypeToCmd>>>>,
@@ -318,7 +381,22 @@ fn run_command(
         pixel_height: 0,
     }).unwrap();
 
-    let cmd = pty::CommandBuilder::new(cmd);
+    let mut cmd = pty::CommandBuilder::new(cmd);
+    
+    /* Update env vars for child shell */
+    if let Some(shell_id) = shell_id {
+        cmd.env("HOPOSHELL_SHELL_ID", shell_id);
+    }
+    let mut hoposhell_exec_path = env::current_exe().unwrap();
+    cmd.env(
+        "PATH",
+        format!(
+            "{}:{}",
+            env::var("PATH").unwrap_or_else(|_| { String::from("") }),
+            hoposhell_exec_path.parent().unwrap().to_str().unwrap()
+        )
+    );
+    /******************************** */
 
     let _pty_child = pty_pair.slave.spawn_command(cmd).expect("Unable to spawn shell");
     
