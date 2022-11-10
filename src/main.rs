@@ -387,7 +387,7 @@ fn run_command(
     if let Some(shell_id) = shell_id {
         cmd.env("HOPOSHELL_SHELL_ID", shell_id);
     }
-    let mut hoposhell_exec_path = env::current_exe().unwrap();
+    let hoposhell_exec_path = env::current_exe().unwrap();
     cmd.env(
         "PATH",
         format!(
