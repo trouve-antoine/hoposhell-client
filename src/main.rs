@@ -48,6 +48,7 @@ enum ArgsCommand {
 
 struct Args {
     version: String,
+    already_connected: bool,
     use_ssl: bool,
     cmd: String,
     auto_reconnect: bool,
@@ -92,6 +93,11 @@ fn parse_args() -> Args {
 
     let mut file_id: Option<String> = None;
 
+    let already_connected = match env::var("HOPOSHELL_CONNECTED") {
+        Ok(_) => true,
+        Err(_) => false
+    };
+
     if cmd_args.len() > 1 {
         match cmd_args[1].as_str() {
             "connect" => {
@@ -129,6 +135,7 @@ fn parse_args() -> Args {
     let mut args = Args {
         version: String::from(env!("CARGO_PKG_VERSION")),
         auto_reconnect: false,
+        already_connected: already_connected,
         cmd: match env::var("SHELL") {
             Ok(x) => x,
             Err(_) => String::from("bash")
@@ -240,11 +247,9 @@ fn main() {
 
     println!("Got command {:?}", args.command);
 
-    if std::env::current_exe().unwrap().file_name().unwrap().eq("hopo") {
-        if args.command == ArgsCommand::CONNECT {
-            eprintln!("Unauthorized command: connect");
-            std::process::exit(-1);
-        }
+    if args.already_connected && args.command == ArgsCommand::CONNECT {
+        eprintln!("Got command connect but the shell is already connected");
+        std::process::exit(-1);
     }
 
     match args.command {
@@ -253,7 +258,7 @@ fn main() {
         ArgsCommand::DOWNLOAD => main_download(args),
         ArgsCommand::UPLOAD => main_upload(args),
         ArgsCommand::VERSION => {
-            eprintln!("Hoposhell v{}", args.version)
+            eprintln!("Hoposhell Client v{}", args.version)
         }
     }
 }
@@ -429,18 +434,21 @@ fn run_command(
     
     /* Update env vars for child shell */
     if let Some(shell_id) = shell_id {
-        cmd.env("HOPOSHELL_SHELL_ID", shell_id);
+        cmd.env("HOPOSHELL_SHELL_ID", &shell_id);
+        cmd.env("HOPOSHELL_CONNECTED", &shell_id);
+    } else {
+        cmd.env("HOPOSHELL_CONNECTED", "1");
     }
     // let hoposhell_exec_path = env::current_exe().unwrap();
-    cmd.env(
-        "PATH",
-        format!(
-            "{}:{}",
-            env::var("PATH").unwrap_or_else(|_| { String::from("") }),
-            hoposhell_folder,
-            // hoposhell_exec_path.parent().unwrap().to_str().unwrap()
-        )
-    );
+    // cmd.env(
+    //     "PATH",
+    //     format!(
+    //         "{}:{}",
+    //         env::var("PATH").unwrap_or_else(|_| { String::from("") }),
+    //         hoposhell_folder,
+    //         // hoposhell_exec_path.parent().unwrap().to_str().unwrap()
+    //     )
+    // );
     /******************************** */
 
     let _pty_child = pty_pair.slave.spawn_command(cmd).expect("Unable to spawn shell");
