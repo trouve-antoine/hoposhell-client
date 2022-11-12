@@ -41,12 +41,13 @@ fn get_now() -> u128 {
         .as_millis()
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum ArgsCommand {
-    CONNECT, SETUP, DOWNLOAD, UPLOAD
+    CONNECT, SETUP, DOWNLOAD, UPLOAD, VERSION
 }
 
 struct Args {
+    version: String,
     use_ssl: bool,
     cmd: String,
     auto_reconnect: bool,
@@ -60,7 +61,8 @@ struct Args {
     verify_crt: bool,
     command: ArgsCommand,
     shell_name: Option<String>,
-    file_id: Option<String>
+    file_id: Option<String>,
+    hoposhell_folder_path: String
 }
 
 fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
@@ -108,6 +110,10 @@ fn parse_args() -> Args {
                 file_id = Some(cmd_args[2].clone());
                 command = ArgsCommand::DOWNLOAD;
             }
+            "version" => {
+                file_id = None;
+                command = ArgsCommand::VERSION;
+            }
             _ => {
                 shell_name = Some(cmd_args[1].clone());
                 command = ArgsCommand::CONNECT;
@@ -121,6 +127,7 @@ fn parse_args() -> Args {
     let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(hoposhell_folder_name);
 
     let mut args = Args {
+        version: String::from(env!("CARGO_PKG_VERSION")),
         auto_reconnect: false,
         cmd: match env::var("SHELL") {
             Ok(x) => x,
@@ -128,7 +135,7 @@ fn parse_args() -> Args {
         },
         use_ssl: true,
         server_url: String::from("api.hoposhell.com:10000"),
-        api_url: String::from("api.hoposhell.com"),
+        api_url: String::from("https://api.hoposhell.com"),
         keep_alive:Duration::from_millis(5000),
         read_timeout: Duration::from_millis(50),
         read_timeout_sleep: Duration::ZERO,
@@ -139,7 +146,8 @@ fn parse_args() -> Args {
         verify_crt: true,
         command,
         shell_name,
-        file_id
+        file_id,
+        hoposhell_folder_path: String::from(hoposhell_folder_path.to_str().unwrap())
     };
 
     let reconnect_str = env::var("RECONNECT");
@@ -232,11 +240,21 @@ fn main() {
 
     println!("Got command {:?}", args.command);
 
+    if std::env::current_exe().unwrap().file_name().unwrap().eq("hopo") {
+        if args.command == ArgsCommand::CONNECT {
+            eprintln!("Unauthorized command: connect");
+            std::process::exit(-1);
+        }
+    }
+
     match args.command {
         ArgsCommand::CONNECT => main_connect(args),
         ArgsCommand::SETUP => main_setup(args),
         ArgsCommand::DOWNLOAD => main_download(args),
         ArgsCommand::UPLOAD => main_upload(args),
+        ArgsCommand::VERSION => {
+            eprintln!("Hoposhell v{}", args.version)
+        }
     }
 }
 
@@ -248,7 +266,9 @@ fn main_setup(args: Args) {
             get_shell_credentials(
                 shell_name, args.api_url, 
                 args.server_crt_path.unwrap(),
-                args.shell_key_path.unwrap());
+                args.shell_key_path.unwrap(),
+                args.hoposhell_folder_path
+            );
         },
         None => {
             eprintln!("Please specify the shell name");
@@ -281,7 +301,7 @@ fn main_upload(args: Args) {
     }
 }
 
-fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String) {
+fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String, hoposhell_folder_path: String) {
     eprintln!("🪙 {}/shell-credentials/request/{}", api_url, shell_name);
     reqwest::blocking::get(format!("{}/shell-credentials/request/{}", api_url, shell_name)).unwrap();
     
@@ -294,11 +314,31 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     let server_crt = &credentials["serverCrt"];
     let shell_key = &credentials["shellKey"];
 
+    let server_crt_folder_path = Path::new(&server_crt_path).parent().unwrap();
+    if !server_crt_folder_path.exists() {
+        println!("💾 Create folder {}", server_crt_folder_path.to_str().unwrap());
+        std::fs::create_dir_all(server_crt_folder_path).unwrap();
+    }
     println!("💾 Write server crt in file {}", server_crt_path);
     std::fs::write(&server_crt_path, server_crt).expect("Unable to write server crt file");
     
+    
+    let shell_key_folder_path = Path::new(&shell_key_path).parent().unwrap();
+    if !shell_key_folder_path.exists() {
+        println!("💾 Create folder {}", shell_key_folder_path.to_str().unwrap());
+        std::fs::create_dir_all(shell_key_folder_path).unwrap();
+    }
     println!("💾 Write shell key in file {}", shell_key_path);
     std::fs::write(&shell_key_path, shell_key).expect("Unable to write shell key file");
+    
+    println!("💾 Prepare hopo command {}", shell_key_path);
+    let hoposhell_folder_path = Path::new(&hoposhell_folder_path);
+    if !hoposhell_folder_path.exists() {
+        println!("💾 Create folder {}", hoposhell_folder_path.to_str().unwrap());
+        std::fs::create_dir_all(hoposhell_folder_path).unwrap();
+    }
+    let hoposhell_exe_path =  std::env::current_exe().unwrap();
+    std::fs::copy(hoposhell_exe_path, hoposhell_folder_path.join("hopo")).unwrap();
 }
 
 fn main_connect(args: Args) {
@@ -315,7 +355,7 @@ fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
-    let _command = run_command(args.shell_name, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
+    let _command = run_command(args.shell_name, args.hoposhell_folder_path, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
 
     let hostname = compute_hostname(&args.server_url);
 
@@ -370,6 +410,7 @@ fn main_connect(args: Args) {
 
 fn run_command(
     shell_id: Option<String>,
+    hoposhell_folder: String,
     cmd: String,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
     rx_cmd: Arc<Mutex<Receiver<Message<MessageTypeToCmd>>>>,
@@ -390,13 +431,14 @@ fn run_command(
     if let Some(shell_id) = shell_id {
         cmd.env("HOPOSHELL_SHELL_ID", shell_id);
     }
-    let hoposhell_exec_path = env::current_exe().unwrap();
+    // let hoposhell_exec_path = env::current_exe().unwrap();
     cmd.env(
         "PATH",
         format!(
             "{}:{}",
             env::var("PATH").unwrap_or_else(|_| { String::from("") }),
-            hoposhell_exec_path.parent().unwrap().to_str().unwrap()
+            hoposhell_folder,
+            // hoposhell_exec_path.parent().unwrap().to_str().unwrap()
         )
     );
     /******************************** */
