@@ -331,14 +331,14 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     println!("💾 Write shell key in file {}", shell_key_path);
     std::fs::write(&shell_key_path, shell_key).expect("Unable to write shell key file");
     
-    println!("💾 Prepare hopo command {}", shell_key_path);
-    let hoposhell_folder_path = Path::new(&hoposhell_folder_path);
-    if !hoposhell_folder_path.exists() {
-        println!("💾 Create folder {}", hoposhell_folder_path.to_str().unwrap());
-        std::fs::create_dir_all(hoposhell_folder_path).unwrap();
-    }
-    let hoposhell_exe_path =  std::env::current_exe().unwrap();
-    std::fs::copy(hoposhell_exe_path, hoposhell_folder_path.join("hopo")).unwrap();
+    // println!("💾 Prepare hopo command {}", shell_key_path);
+    // let hoposhell_folder_path = Path::new(&hoposhell_folder_path);
+    // if !hoposhell_folder_path.exists() {
+    //     println!("💾 Create folder {}", hoposhell_folder_path.to_str().unwrap());
+    //     std::fs::create_dir_all(hoposhell_folder_path).unwrap();
+    // }
+    // let hoposhell_exe_path =  std::env::current_exe().unwrap();
+    // std::fs::copy(hoposhell_exe_path, hoposhell_folder_path.join("hopo")).unwrap();
 }
 
 fn main_connect(args: Args) {
