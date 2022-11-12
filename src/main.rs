@@ -41,6 +41,7 @@ fn get_now() -> u128 {
         .as_millis()
 }
 
+#[derive(Debug)]
 enum ArgsCommand {
     CONNECT, SETUP, DOWNLOAD, UPLOAD
 }
@@ -97,7 +98,7 @@ fn parse_args() -> Args {
             }
             "setup" => {
                 shell_name = Some(cmd_args[2].clone());
-                command = ArgsCommand::CONNECT;
+                command = ArgsCommand::SETUP;
             }
             "upload" => {
                 file_id = Some(cmd_args[2].clone());
@@ -228,6 +229,8 @@ fn compute_hostname(server_url: &String) -> &str {
 
 fn main() {
     let args = parse_args();
+
+    println!("Got command {:?}", args.command);
 
     match args.command {
         ArgsCommand::CONNECT => main_connect(args),
