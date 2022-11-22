@@ -493,7 +493,7 @@ fn run_command(
                 }
                 let msg = Message {
                     mtype: MessageTypeToStream::STDOUT,
-                    content: Some(buf.to_vec())
+                    content: Some(buf[..n].to_vec())
                 };
                 history_of_messages_to_stream_stdout.lock().unwrap().push(msg.clone());
                 tx_to_stream_stdout.lock().unwrap().send(msg).unwrap();
