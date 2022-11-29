@@ -26,6 +26,7 @@ enum MessageTypeToStream {
 const BUF_SIZE: usize = 1024;
 
 const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
+const MAX_MESSAGE_HISTORY_SIZE: usize = 2048;
 
 #[derive(Clone, Debug)]
 struct Message<T> {
@@ -306,7 +307,7 @@ fn main_upload(args: Args) {
     }
 }
 
-fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String, hoposhell_folder_path: String) {
+fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String, _hoposhell_folder_path: String) {
     eprintln!("🪙 {}/shell-credentials/request/{}", api_url, shell_name);
     reqwest::blocking::get(format!("{}/shell-credentials/request/{}", api_url, shell_name)).unwrap();
     
@@ -415,7 +416,7 @@ fn main_connect(args: Args) {
 
 fn run_command(
     shell_id: Option<String>,
-    hoposhell_folder: String,
+    _hoposhell_folder: String,
     cmd: String,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
     rx_cmd: Arc<Mutex<Receiver<Message<MessageTypeToCmd>>>>,
@@ -495,7 +496,15 @@ fn run_command(
                     mtype: MessageTypeToStream::STDOUT,
                     content: Some(buf[..n].to_vec())
                 };
-                history_of_messages_to_stream_stdout.lock().unwrap().push(msg.clone());
+                {
+                    let mut history_of_messages = history_of_messages_to_stream_stdout.lock().unwrap();
+                    if history_of_messages.len() > MAX_MESSAGE_HISTORY_SIZE {
+                        let delta = history_of_messages.len()-MAX_MESSAGE_HISTORY_SIZE;
+                        history_of_messages.drain(0..delta);
+                    }
+                    history_of_messages.push(msg.clone());
+                }
+
                 tx_to_stream_stdout.lock().unwrap().send(msg).unwrap();
             }
             Err(e) => {
