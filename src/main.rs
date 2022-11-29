@@ -388,6 +388,7 @@ fn main_connect(args: Args) {
                     handle_connection(
                         ssl_stream,
                         tx_to_cmd.clone(), rx_stream.clone(),
+                        &args.version,
                         history_of_messages_to_stream.clone(), 
                         args.keep_alive,
                         args.read_timeout_sleep
@@ -395,6 +396,7 @@ fn main_connect(args: Args) {
                 } else {
                     handle_connection(
                         tcp_stream, tx_to_cmd.clone(), rx_stream.clone(),
+                        &args.version,
                         history_of_messages_to_stream.clone(),
                         args.keep_alive, args.read_timeout_sleep
                     );
@@ -440,20 +442,9 @@ fn run_command(
     } else {
         cmd.env("HOPOSHELL_CONNECTED", "1");
     }
-    // let hoposhell_exec_path = env::current_exe().unwrap();
-    // cmd.env(
-    //     "PATH",
-    //     format!(
-    //         "{}:{}",
-    //         env::var("PATH").unwrap_or_else(|_| { String::from("") }),
-    //         hoposhell_folder,
-    //         // hoposhell_exec_path.parent().unwrap().to_str().unwrap()
-    //     )
-    // );
-    /******************************** */
 
     let _pty_child = pty_pair.slave.spawn_command(cmd).expect("Unable to spawn shell");
-    
+
     let reader = pty_pair.master.try_clone_reader().expect("Unable to get a pty reader");
     let writer = pty_pair.master.try_clone_writer().expect("Unable to get a writer");
     
@@ -521,13 +512,14 @@ fn handle_connection(
     mut stream: impl Read + Write,
     tx_to_cmd: Arc<Mutex<Sender<Message<MessageTypeToCmd>>>>,
     rx_stream: Arc<Mutex<Receiver<Message<MessageTypeToStream>>>>,
+    version: &String,
     history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>,
     keep_alive_delta: Duration,
     read_timeout_sleep: Duration)
 {
     let header_msg = Message {
         mtype: MessageTypeToStream::HEADER,
-        content: Some("v1.0".as_bytes().to_vec())
+        content: Some(format!("v{}", version).as_bytes().to_vec())
     };
     if let Err(_) = send_message_to_stream(&header_msg, &mut stream) {
         eprintln!("Unable to send headers to stream...");
