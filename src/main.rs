@@ -19,7 +19,7 @@ enum MessageTypeToCmd {
 }
 #[derive(Clone, PartialEq, Debug, Copy)]
 enum MessageTypeToStream {
-    STDOUT, HEADER
+    STDOUT, HEADER, COMMAND
     // STDERR, 
 }
 
@@ -361,7 +361,13 @@ fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
-    let _command = run_command(args.shell_name, args.hoposhell_folder_path, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
+    let master_pty = run_command(args.shell_name, args.hoposhell_folder_path, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
+
+    if let Err(_) = &master_pty {
+        eprintln!("Unable to run the shell");
+    }
+
+    let master_pty = master_pty.unwrap();
 
     let hostname = compute_hostname(&args.server_url);
 
@@ -389,7 +395,8 @@ fn main_connect(args: Args) {
                         ssl_stream,
                         tx_to_cmd.clone(), rx_stream.clone(),
                         &args.version,
-                        history_of_messages_to_stream.clone(), 
+                        history_of_messages_to_stream.clone(),
+                        master_pty.clone(),
                         args.keep_alive,
                         args.read_timeout_sleep
                     )
@@ -398,6 +405,7 @@ fn main_connect(args: Args) {
                         tcp_stream, tx_to_cmd.clone(), rx_stream.clone(),
                         &args.version,
                         history_of_messages_to_stream.clone(),
+                        master_pty.clone(),
                         args.keep_alive, args.read_timeout_sleep
                     );
                 }
@@ -422,7 +430,8 @@ fn run_command(
     cmd: String,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
     rx_cmd: Arc<Mutex<Receiver<Message<MessageTypeToCmd>>>>,
-    history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>) -> io::Result<()>
+    history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>
+) -> io::Result<Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>
 {
     let pty_system = pty::native_pty_system();
 
@@ -448,9 +457,14 @@ fn run_command(
     let reader = pty_pair.master.try_clone_reader().expect("Unable to get a pty reader");
     let writer = pty_pair.master.try_clone_writer().expect("Unable to get a writer");
     
+    let master = Arc::new(Mutex::new(pty_pair.master));
+    
     let cmd_stdout = Arc::new(Mutex::new(reader));
     let cmd_stdin = Arc::new(Mutex::new(writer));
 
+    let tx_to_stream_stdin = Arc::clone(&tx_to_stream);
+
+    let master_stdin = master.clone();
     let _stdin_handle = thread::spawn(move || loop {
         if let Ok(msg) = rx_cmd.lock().unwrap().recv() {
             if msg.mtype == MessageTypeToCmd::STDIN {
@@ -458,15 +472,36 @@ fn run_command(
                     cmd_stdin.lock().unwrap().write(&content).unwrap();
                 }
             } else if msg.mtype == MessageTypeToCmd::COMMAND {
-                let content = match msg.content.as_deref() {
-                    Some(c) => Some(String::from_utf8_lossy(&c)),
-                    None => None
+                match msg.content.as_deref() {
+                    Some(c) => {
+                        let c = String::from_utf8_lossy(&c);
+                        let mut parts =  c.split("/");
+                        let cmd = parts.next();
+                        match cmd {
+                            Some("restart") => { eprintln!("Got restart command"); std::process::exit(0) },
+                            Some("resize") => {
+                                let rows: Option<u16> = parse_next_int(&mut parts);
+                                let cols: Option<u16> = parse_next_int(&mut parts);
+
+                                if let (Some(rows), Some(cols)) = (rows, cols) {
+                                    let pty_size = pty::PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+                                    let master = master_stdin.lock().unwrap();
+                                    if let Ok(_) = master.resize(pty_size) {
+                                        tx_to_stream_stdin.lock().unwrap().send(make_size_message(&master)).unwrap();
+                                    } else {
+                                        eprintln!("Unable to set terminal size");
+                                    }
+                                } else {
+                                   eprintln!("Got incorrect resize command: {:?}", c); 
+                                }
+                            },
+                            _ => { eprintln!("Got unknown command: {:?}", cmd); }
+                        }
+                    }
+                    None => {
+                        eprintln!("Got an empty command.")
+                    }
                 };
-                match content.as_deref() {
-                    Some("restart") => { eprintln!("Got restart command"); std::process::exit(0) },
-                    Some(c) => eprintln!("Got unknown command: {}", c),
-                    None => eprintln!("Got an empty command.")
-                }
             } else {
                 eprintln!("Unknown message: {:?}", msg);
             }
@@ -505,7 +540,7 @@ fn run_command(
         };
     });
 
-    return Ok(());
+    return Ok(master);
 }
 
 fn handle_connection(
@@ -514,6 +549,7 @@ fn handle_connection(
     rx_stream: Arc<Mutex<Receiver<Message<MessageTypeToStream>>>>,
     version: &String,
     history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>,
+    master_pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     keep_alive_delta: Duration,
     read_timeout_sleep: Duration)
 {
@@ -522,6 +558,11 @@ fn handle_connection(
         content: Some(format!("v{}", version).as_bytes().to_vec())
     };
     if let Err(_) = send_message_to_stream(&header_msg, &mut stream) {
+        eprintln!("Unable to send headers to stream...");
+        return;
+    }
+
+    if let Err(_) = send_message_to_stream(&make_size_message(&master_pty.lock().unwrap()), &mut stream) {
         eprintln!("Unable to send headers to stream...");
         return;
     }
@@ -627,7 +668,8 @@ fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mu
             let encoded_content = match msg.mtype {
                 // MessageTypeToStream::STDERR => format!("{}-eee---\n", content_64),
                 MessageTypeToStream::STDOUT => format!("{}-ooo---\n", content_64),
-                MessageTypeToStream::HEADER => format!("{}-hhh---\n", content_64)
+                MessageTypeToStream::HEADER => format!("{}-hhh---\n", content_64),
+                MessageTypeToStream::COMMAND => format!("{}-ccc---\n", content_64)
             };
             return stream_writer.write(encoded_content.as_bytes());
         }
@@ -670,4 +712,24 @@ fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -
         }
     }
     return messages;
+}
+
+fn parse_next_int(parts: &mut std::str::Split<&str>) -> Option<u16> {
+    if let Some(rows_str) = parts.next() {
+        return match rows_str.parse() {
+            Ok(rows) => Some(rows),
+            Err(_) => None
+        };
+    } else {
+        return None;
+    };
+}
+
+fn make_size_message(master_pty: &Box<dyn portable_pty::MasterPty + Send>) -> Message<MessageTypeToStream>{
+    let pty_size = master_pty.get_size().unwrap();
+
+    return Message {
+        mtype: MessageTypeToStream::COMMAND,
+        content: Some(format!("size/{}/{}", pty_size.rows, pty_size.cols).as_bytes().to_vec())
+    };
 }
