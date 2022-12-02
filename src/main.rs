@@ -64,7 +64,9 @@ struct Args {
     command: ArgsCommand,
     shell_name: Option<String>,
     file_id: Option<String>,
-    hoposhell_folder_path: String
+    hoposhell_folder_path: String,
+    default_cols: u16,
+    default_rows: u16
 }
 
 fn parse_duration_from_ms_str(time_ms_str: String) -> Duration {
@@ -133,6 +135,9 @@ fn parse_args() -> Args {
     });
     let hoposhell_folder_path = Path::new(&env::var("HOME").unwrap()).join(hoposhell_folder_name);
 
+    let default_cols: u16 = env::var("COLS").unwrap_or_else(|_| String::from("80")).parse().unwrap();
+    let default_rows: u16 = env::var("ROWS").unwrap_or_else(|_| String::from("24")).parse().unwrap();
+
     let mut args = Args {
         version: String::from(env!("CARGO_PKG_VERSION")),
         auto_reconnect: false,
@@ -155,7 +160,9 @@ fn parse_args() -> Args {
         command,
         shell_name,
         file_id,
-        hoposhell_folder_path: String::from(hoposhell_folder_path.to_str().unwrap())
+        hoposhell_folder_path: String::from(hoposhell_folder_path.to_str().unwrap()),
+        default_cols,
+        default_rows
     };
 
     let reconnect_str = env::var("RECONNECT");
@@ -361,7 +368,14 @@ fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
-    let master_pty = run_command(args.shell_name, args.hoposhell_folder_path, args.cmd, tx_to_stream, rx_cmd, history_of_messages_to_stream.clone());
+    let master_pty = run_command(
+        args.shell_name,
+        args.hoposhell_folder_path,
+        args.cmd,
+        args.default_cols, args.default_rows,
+        tx_to_stream, rx_cmd,
+        history_of_messages_to_stream.clone()
+    );
 
     if let Err(_) = &master_pty {
         eprintln!("Unable to run the shell");
@@ -428,6 +442,8 @@ fn run_command(
     shell_id: Option<String>,
     _hoposhell_folder: String,
     cmd: String,
+    cols: u16,
+    rows: u16,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
     rx_cmd: Arc<Mutex<Receiver<Message<MessageTypeToCmd>>>>,
     history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>
@@ -436,8 +452,8 @@ fn run_command(
     let pty_system = pty::native_pty_system();
 
     let pty_pair = pty_system.openpty(pty::PtySize {
-        rows: 24,
-        cols: 80,
+        rows: rows,
+        cols: cols,
         pixel_width: 0,
         pixel_height: 0,
     }).unwrap();
