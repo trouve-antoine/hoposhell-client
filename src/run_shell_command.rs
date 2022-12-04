@@ -8,9 +8,7 @@ use std::{
 use portable_pty as pty;
 
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, make_size_message};
-
-const BUF_SIZE: usize = 1024;
-const MAX_MESSAGE_HISTORY_SIZE: usize = 2048;
+use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
 
 pub fn run_command(
     shell_id: Option<String>,

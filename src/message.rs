@@ -1,3 +1,5 @@
+use super::constants::{BUF_SIZE};
+
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum MessageTypeToCmd {
     STDIN, COMMAND
@@ -21,4 +23,42 @@ pub fn make_size_message(master_pty: &Box<dyn portable_pty::MasterPty + Send>) -
         mtype: MessageTypeToStream::COMMAND,
         content: Some(format!("size/{}/{}", pty_size.rows, pty_size.cols).as_bytes().to_vec())
     };
+}
+
+pub fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -> Vec<Message<MessageTypeToCmd>> {
+    buffer.push_str(std::str::from_utf8(&new_data[..n]).unwrap());
+            
+    let buffer_copy = buffer.clone();
+    let buffer_parts: Vec<&str> = buffer_copy.split("---\n").collect();
+    buffer.clear();
+
+    let mut messages = vec![];
+
+    for buf_part in buffer_parts.iter() {
+        if buf_part.len() == 0 { continue; }
+
+        let is_last = buf_part == buffer_parts.last().unwrap();
+
+        let mtype: Option<MessageTypeToCmd> = if buf_part.ends_with("-iii") {
+            Some(MessageTypeToCmd::STDIN)
+        } else if buf_part.ends_with("-ccc") {
+            Some(MessageTypeToCmd::COMMAND)
+        } else {
+            None
+        };
+
+        match mtype {
+            None => {
+                if is_last { buffer.push_str(buf_part); }
+                else { eprintln!("\n[EE] Got bad part in communication"); }
+            }
+            Some(mtype) => {
+                // 4 is the length of -eee or -ooo
+                let payload_64: &str = &buf_part[..buf_part.len()-4];
+                let payload = base64::decode(payload_64).unwrap();
+                messages.push(Message { mtype, content: Some(payload) });
+            }
+        }
+    }
+    return messages;
 }

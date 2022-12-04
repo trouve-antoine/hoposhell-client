@@ -2,6 +2,7 @@ mod args;
 mod message;
 mod run_shell_command;
 mod connect;
+mod constants;
 
 use std::{
     path::Path,

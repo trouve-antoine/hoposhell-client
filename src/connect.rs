@@ -8,13 +8,11 @@ use std::{
 };
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
+use super::constants::BUF_SIZE;
 
-use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, make_size_message};
+use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, make_size_message, separate_messages};
 use super::run_shell_command::{run_command};
 use super::args::Args;
-
-
-const BUF_SIZE: usize = 1024;
 
 fn get_now() -> u128 {
     SystemTime::now()
@@ -262,42 +260,4 @@ fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mu
             return stream_writer.write(encoded_content.as_bytes());
         }
     }
-}
-
-fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -> Vec<Message<MessageTypeToCmd>> {
-    buffer.push_str(std::str::from_utf8(&new_data[..n]).unwrap());
-            
-    let buffer_copy = buffer.clone();
-    let buffer_parts: Vec<&str> = buffer_copy.split("---\n").collect();
-    buffer.clear();
-
-    let mut messages = vec![];
-
-    for buf_part in buffer_parts.iter() {
-        if buf_part.len() == 0 { continue; }
-
-        let is_last = buf_part == buffer_parts.last().unwrap();
-
-        let mtype: Option<MessageTypeToCmd> = if buf_part.ends_with("-iii") {
-            Some(MessageTypeToCmd::STDIN)
-        } else if buf_part.ends_with("-ccc") {
-            Some(MessageTypeToCmd::COMMAND)
-        } else {
-            None
-        };
-
-        match mtype {
-            None => {
-                if is_last { buffer.push_str(buf_part); }
-                else { eprintln!("\n[EE] Got bad part in communication"); }
-            }
-            Some(mtype) => {
-                // 4 is the length of -eee or -ooo
-                let payload_64: &str = &buf_part[..buf_part.len()-4];
-                let payload = base64::decode(payload_64).unwrap();
-                messages.push(Message { mtype, content: Some(payload) });
-            }
-        }
-    }
-    return messages;
 }
