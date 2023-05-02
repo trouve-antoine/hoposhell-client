@@ -1,4 +1,6 @@
 use super::constants::{BUF_SIZE};
+use base64::engine::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum MessageTypeToCmd {
@@ -55,7 +57,7 @@ pub fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usiz
             Some(mtype) => {
                 // 4 is the length of -eee or -ooo
                 let payload_64: &str = &buf_part[..buf_part.len()-4];
-                let payload = base64::decode(payload_64).unwrap();
+                let payload = BASE64.decode(payload_64).unwrap();
                 messages.push(Message { mtype, content: Some(payload) });
             }
         }

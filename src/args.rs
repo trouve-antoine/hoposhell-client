@@ -1,16 +1,17 @@
 use std::{
     env,
-    path::Path,
-    time::Duration
+    path::{Path},
+    time::Duration,
 };
 
 const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ArgsCommand {
     CONNECT, SETUP, DOWNLOAD, UPLOAD, VERSION
 }
 
+#[derive(Debug, Clone)]
 pub struct Args {
     pub version: String,
     pub already_connected: bool,
@@ -62,7 +63,9 @@ pub fn parse_args() -> Args {
     if cmd_args.len() > 1 {
         match cmd_args[1].as_str() {
             "connect" => {
-                shell_name = Some(cmd_args[2].clone());
+                if cmd_args.len() > 2 {
+                    shell_name = Some(cmd_args[2].clone());
+                }
                 command = ArgsCommand::CONNECT;
             }
             "setup" => {

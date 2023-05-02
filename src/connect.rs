@@ -4,8 +4,16 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
     net::{TcpStream},
-    sync::mpsc::{self, Sender, Receiver}
+    sync::mpsc::{self, Sender, Receiver},
+    fs
 };
+
+use base64::engine::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
+
+use regex::Regex;
+
+use expect_exit::{Expected};
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
 use super::constants::BUF_SIZE;
@@ -28,10 +36,17 @@ fn make_ssl_conector(server_crt_path: String, shell_key_path: String, verify_crt
     println!("Use shell key at {}", shell_key_path);
 
     let mut ssl_builder = ssl::SslConnector::builder(ssl::SslMethod::tls_client()).unwrap();
-    ssl_builder.set_ca_file(server_crt_path).unwrap();
     
-    ssl_builder.set_certificate_file(&shell_key_path, SslFiletype::PEM).unwrap();
-    ssl_builder.set_private_key_file(&shell_key_path, SslFiletype::PEM).unwrap();
+    ssl_builder.set_ca_file(&server_crt_path).expect_or_exit(||
+        format!("Unable to load Hoposhell server certificate at {}. You might need to run command `hopo setup`.", &server_crt_path)
+    );
+    
+    ssl_builder.set_certificate_file(&shell_key_path, SslFiletype::PEM).expect_or_exit(||
+        format!("Unable to load shell certificate at {}. You might need to run command `hopo setup`.", &shell_key_path)
+    );
+    ssl_builder.set_private_key_file(&shell_key_path, SslFiletype::PEM).expect_or_exit(||
+        format!("Unable to load shell private key at {}. You might need to run command `hopo setup`", &shell_key_path)
+    );
 
     if !verify_crt {
         println!("!! I will not verify the server CRT");
@@ -46,6 +61,26 @@ fn compute_hostname(server_url: &String) -> &str {
 }
 
 pub fn main_connect(args: Args) {
+    let mut args = args.clone();
+
+    if args.shell_key_path.is_none() {
+        // Pick up the first shell key in the folder
+        let shell_pem_regex = Regex::new("shell_.*\\.pem").unwrap();
+        let all_files = list_files_in_folder(&args.hoposhell_folder_path, &shell_pem_regex);
+        match all_files.len() {
+            0 => {
+                println!("There are no shell certificate in folder {}", &args.hoposhell_folder_path);
+            },
+            1 => {
+                println!("Using default shell key in folder {}: {}", &args.hoposhell_folder_path, all_files[0]);
+                args.shell_key_path = Some(all_files[0].clone());
+            }
+            _ => {
+                println!("There are more than on shell certificate in folder {}. Cannot determine default.", &args.hoposhell_folder_path);
+            }
+        }
+    }
+
     let (tx_to_cmd, rx_cmd) = mpsc::channel::<Message<MessageTypeToCmd>>();
     let tx_to_cmd = Arc::new(Mutex::new(tx_to_cmd));
     let rx_cmd = Arc::new(Mutex::new(rx_cmd));
@@ -78,9 +113,9 @@ pub fn main_connect(args: Args) {
 
     let ssl_connector = if args.use_ssl {
         Some(make_ssl_conector(
-            args.server_crt_path.expect("Please specify env var HOPOSHELL_SERVER_CRT"),
-            args.shell_key_path.expect("Please specify env var HOPOSHELL_SHELL_KEY"),
-             args.verify_crt
+            args.server_crt_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.")),
+            args.shell_key_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SHELL_KEY, or specify the shell_id parameter of the connect command.")),
+            args.verify_crt
         ))
     } else {
         None
@@ -249,7 +284,7 @@ fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mu
     match &msg.content {
         None => { return Ok(0) }
         Some(content) => {
-            let content_64 = base64::encode(content);
+            let content_64 = BASE64.encode(content);
             
             let encoded_content = match msg.mtype {
                 // MessageTypeToStream::STDERR => format!("{}-eee---\n", content_64),
@@ -260,4 +295,17 @@ fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mu
             return stream_writer.write(encoded_content.as_bytes());
         }
     }
+}
+
+fn list_files_in_folder(path: &String, file_pattern: &Regex) -> Vec<String> {
+    let mut files: Vec<String> = Vec::new();
+    let paths = fs::read_dir(path).unwrap();
+    for path in paths {
+        let path = path.unwrap().path();
+        let path_str = path.to_str().unwrap();
+        if file_pattern.is_match(path_str) {
+            files.push(String::from(path_str));
+        }
+    }
+    return files;
 }
