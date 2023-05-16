@@ -3,6 +3,14 @@ mod message;
 mod run_shell_command;
 mod connect;
 mod constants;
+mod commands {
+    pub mod request_or_response;
+    pub mod command_processor;
+    pub mod command_history;
+    pub mod restart;
+    pub mod resize;
+    pub mod ls;
+}
 
 use std::{
     path::Path,

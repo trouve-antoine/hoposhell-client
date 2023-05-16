@@ -1,2 +1,3 @@
-pub const BUF_SIZE: usize = 1024;
+pub const BUF_SIZE: usize = 1024 * 16;
 pub const MAX_MESSAGE_HISTORY_SIZE: usize = 2048;
+pub const MESSAGE_PARTS_SEPARATOR: u8 = b'/';

@@ -1,4 +1,4 @@
-use super::constants::{BUF_SIZE};
+use super::constants::{BUF_SIZE, MESSAGE_PARTS_SEPARATOR};
 use base64::engine::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
@@ -16,15 +16,6 @@ pub enum MessageTypeToStream {
 pub struct Message<T> {
     pub mtype: T,
     pub content: Option<Vec<u8>>
-}
-
-pub fn make_size_message(master_pty: &Box<dyn portable_pty::MasterPty + Send>) -> Message<MessageTypeToStream>{
-    let pty_size = master_pty.get_size().unwrap();
-
-    return Message {
-        mtype: MessageTypeToStream::COMMAND,
-        content: Some(format!("size/{}/{}", pty_size.rows, pty_size.cols).as_bytes().to_vec())
-    };
 }
 
 pub fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -> Vec<Message<MessageTypeToCmd>> {

@@ -7,7 +7,9 @@ use std::{
 
 use portable_pty as pty;
 
-use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, make_size_message};
+use crate::commands::request_or_response::RequestOrResponse;
+
+use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
 use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
 
 pub fn run_command(
@@ -53,47 +55,50 @@ pub fn run_command(
     let tx_to_stream_stdin = Arc::clone(&tx_to_stream);
 
     let master_stdin = master.clone();
-    let _stdin_handle = thread::spawn(move || loop {
-        if let Ok(msg) = rx_cmd.lock().unwrap().recv() {
-            if msg.mtype == MessageTypeToCmd::STDIN {
-                if let Some(content) = msg.content {
-                    cmd_stdin.lock().unwrap().write(&content).unwrap();
-                }
-            } else if msg.mtype == MessageTypeToCmd::COMMAND {
-                match msg.content.as_deref() {
-                    Some(c) => {
-                        let c = String::from_utf8_lossy(&c);
-                        let mut parts =  c.split("/");
-                        let cmd = parts.next();
-                        match cmd {
-                            Some("restart") => { eprintln!("Got restart command"); std::process::exit(0) },
-                            Some("resize") => {
-                                let rows: Option<u16> = parse_next_int(&mut parts);
-                                let cols: Option<u16> = parse_next_int(&mut parts);
+    let _stdin_handle = thread::spawn(move || {
+        let mut commands = crate::commands::command_processor::CommandProcessor::new();
 
-                                if let (Some(rows), Some(cols)) = (rows, cols) {
-                                    let pty_size = pty::PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
-                                    let master = master_stdin.lock().unwrap();
-                                    if let Ok(_) = master.resize(pty_size) {
-                                        tx_to_stream_stdin.lock().unwrap().send(make_size_message(&master)).unwrap();
-                                    } else {
-                                        eprintln!("Unable to set terminal size");
+        loop {
+            if let Ok(msg) = rx_cmd.lock().unwrap().recv() {
+                if msg.mtype == MessageTypeToCmd::STDIN {
+                    if let Some(content) = msg.content {
+                        cmd_stdin.lock().unwrap().write(&content).unwrap();
+                    }
+                } else if msg.mtype == MessageTypeToCmd::COMMAND {
+                    match msg.content.as_deref() {
+                        Some(c) => {
+                            let send_message = |msg: Message<MessageTypeToStream>| {
+                                tx_to_stream_stdin.lock().unwrap().send(msg).unwrap();
+                            };
+                            let c = String::from_utf8_lossy(&c);
+                            if c.starts_with("restart") {
+                                /* The shell will die */
+                                crate::commands::restart::process_restart_command(&c);
+                            } else if c.starts_with("resize") {
+                                /* The shell will resize, and sends its current size back */
+                                crate::commands::resize::process_resize_command(&c, &master_stdin, &send_message);
+                            } else {
+                                /* A generic command */
+                                let res = commands.process_msg(c);
+                                match res {
+                                    Some(res) => {
+                                        /* must send the response back */
+                                    },
+                                    None => {
+                                        /* nothing to do */
                                     }
-                                } else {
-                                   eprintln!("Got incorrect resize command: {:?}", c); 
                                 }
-                            },
-                            _ => { eprintln!("Got unknown command: {:?}", cmd); }
+                            }
                         }
-                    }
-                    None => {
-                        eprintln!("Got an empty command.")
-                    }
-                };
-            } else {
-                eprintln!("Unknown message: {:?}", msg);
-            }
-        };
+                        None => {
+                            eprintln!("Got an empty command.")
+                        }
+                    };
+                } else {
+                    eprintln!("Unknown message: {:?}", msg);
+                }
+            };
+        }
     });
 
     let tx_to_stream_stdout = Arc::clone(&tx_to_stream);
@@ -129,15 +134,4 @@ pub fn run_command(
     });
 
     return Ok(master);
-}
-
-fn parse_next_int(parts: &mut std::str::Split<&str>) -> Option<u16> {
-    if let Some(rows_str) = parts.next() {
-        return match rows_str.parse() {
-            Ok(rows) => Some(rows),
-            Err(_) => None
-        };
-    } else {
-        return None;
-    };
 }

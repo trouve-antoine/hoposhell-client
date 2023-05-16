@@ -16,9 +16,11 @@ use regex::Regex;
 use expect_exit::{Expected};
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
+use crate::commands::resize::make_size_message;
+
 use super::constants::BUF_SIZE;
 
-use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, make_size_message, separate_messages};
+use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, separate_messages};
 use super::run_shell_command::{run_command};
 use super::args::Args;
 
