@@ -15,7 +15,7 @@ impl CommandHistory {
         }
     }
 
-    pub fn append(&mut self, msg: Cow<str>) -> RequestOrResponse {
+    pub fn append(&mut self, msg: &Vec<u8>) -> RequestOrResponse {
         let req_or_res = ChunkedRequestOrResponse::deserialize(msg);
 
         match req_or_res {
@@ -26,7 +26,7 @@ impl CommandHistory {
                 match past_pos {
                     Some(pos) => {
                         let past_request = &mut self.past_requests[pos];
-                        past_request.payload.push_str(req.payload.as_str());
+                        past_request.payload.append(&mut req.payload.clone());
 
                         match req.chunk_type {
                             ChunkType::Last => {
@@ -65,7 +65,7 @@ impl CommandHistory {
                 match past_pos {
                     Some(pos) => {
                         let past_response = &mut self.past_responses[pos];
-                        past_response.payload.push_str(res.payload.as_str());
+                        past_response.payload.append(&mut res.payload.clone());
 
                         match res.chunk_type {
                             ChunkType::Last => {

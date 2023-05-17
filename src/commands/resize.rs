@@ -7,14 +7,14 @@ use crate::constants::{MESSAGE_PARTS_SEPARATOR};
 use crate::message::{Message, MessageTypeToStream};
 
 pub fn process_resize_command(
-    c: &Cow<&[u8]>,
+    c: &Vec<u8>,
     master_stdin: &Arc<Mutex<Box<dyn pty::MasterPty + Send>>>,
     send_message: &dyn Fn(Message<MessageTypeToStream>)
 ) {
     /* The shell will resize, and sends its current size back */
     let mut parts = c.splitn(3, |x| x == &MESSAGE_PARTS_SEPARATOR);
     
-    let cmd = parts.next();
+    let _ = parts.next();
     let rows = maybe_u16(parts.next());
     let cols = maybe_u16(parts.next());
 

@@ -7,7 +7,7 @@ use std::{
 
 use portable_pty as pty;
 
-use crate::commands::request_or_response::RequestOrResponse;
+use crate::{commands::request_or_response::RequestOrResponse, constants::MESSAGE_PARTS_SEPARATOR};
 
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
 use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
@@ -65,27 +65,27 @@ pub fn run_command(
                         cmd_stdin.lock().unwrap().write(&content).unwrap();
                     }
                 } else if msg.mtype == MessageTypeToCmd::COMMAND {
-                    match msg.content.as_deref() {
+                    match msg.content {
                         Some(c) => {
                             let send_message = |msg: Message<MessageTypeToStream>| {
                                 tx_to_stream_stdin.lock().unwrap().send(msg).unwrap();
                             };
-                            let c = String::from_utf8_lossy(&c);
-                            if c.starts_with("restart") {
+                            if c.starts_with(b"restart") {
                                 /* The shell will die */
-                                crate::commands::restart::process_restart_command(&c);
-                            } else if c.starts_with("resize") {
+                                crate::commands::restart::process_restart_command();
+                            } else if c.starts_with(b"resize") {
                                 /* The shell will resize, and sends its current size back */
                                 crate::commands::resize::process_resize_command(&c, &master_stdin, &send_message);
                             } else {
                                 /* A generic command */
-                                let res = commands.process_msg(c);
-                                match res {
-                                    Some(res) => {
-                                        /* must send the response back */
-                                    },
-                                    None => {
-                                        /* nothing to do */
+                                if let Some(res) = commands.process_msg(&c) {
+                                    /* consume and send the response back */
+                                    for chunk in res.chunk() {
+                                        let msg = Message {
+                                            mtype: MessageTypeToStream::STDOUT,
+                                            content: Some(chunk.to_message_payload())
+                                        };
+                                        tx_to_stream_stdin.lock().unwrap().send(msg).unwrap();
                                     }
                                 }
                             }

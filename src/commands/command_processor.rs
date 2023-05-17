@@ -14,7 +14,7 @@ impl CommandProcessor {
         }
     }
 
-    pub fn process_msg(&mut self, msg: Cow<str>) -> Option<Response> {
+    pub fn process_msg(&mut self, msg: &Vec<u8>) -> Option<Response> {
         /* Parses and processes a command message in serialized form */
         /* (parsing is actually done inside command_history) */
         let cmd = self.history.append(msg);
