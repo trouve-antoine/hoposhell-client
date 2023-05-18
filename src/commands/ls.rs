@@ -6,11 +6,14 @@ use super::request_or_response::maybe_string;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum FileType {
+     #[serde(rename = "file")]
     File,
+     #[serde(rename = "dir")]
     Folder
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileInfos {
     pub name: String,
     pub file_type: FileType,
@@ -25,8 +28,9 @@ pub fn process_ls_command(
     let folder_path = maybe_string(Some(payload));
 
     match folder_path {
-        Some(folder_path) => match std::fs::read_dir(folder_path) {
+        Some(folder_path) => match std::fs::read_dir(&folder_path) {
             Ok(entries) => {
+                println!("Now listing files in folder: {}", &folder_path);
                 let mut files = vec![];
                 for entry in entries {
                     if let Ok(entry) = entry {
@@ -47,14 +51,16 @@ pub fn process_ls_command(
                     }
                 }
                 return Some(serde_json::json!({
-                    "files": files
+                    "entries": files
                 }));
             },
             Err(_) => {
+                println!("Tried and failed to list folder: {}", &folder_path);
                 return None;
             }
         },
         None => {
+            println!("Got an invalid ls request.");
             return None;
         }
     }

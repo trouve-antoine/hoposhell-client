@@ -67,9 +67,11 @@ pub fn run_command(
                 } else if msg.mtype == MessageTypeToCmd::COMMAND {
                     match msg.content {
                         Some(c) => {
+                            /******* */
                             let send_message = |msg: Message<MessageTypeToStream>| {
                                 tx_to_stream_stdin.lock().unwrap().send(msg).unwrap();
                             };
+                            /******* */
                             if c.starts_with(b"restart") {
                                 /* The shell will die */
                                 crate::commands::restart::process_restart_command();
@@ -82,10 +84,10 @@ pub fn run_command(
                                     /* consume and send the response back */
                                     for chunk in res.chunk() {
                                         let msg = Message {
-                                            mtype: MessageTypeToStream::STDOUT,
+                                            mtype: MessageTypeToStream::COMMAND,
                                             content: Some(chunk.to_message_payload())
                                         };
-                                        tx_to_stream_stdin.lock().unwrap().send(msg).unwrap();
+                                        send_message(msg);
                                     }
                                 }
                             }

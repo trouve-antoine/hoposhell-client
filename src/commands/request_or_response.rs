@@ -1,6 +1,6 @@
-use std::{borrow::Cow, time::SystemTime};
+use std::{time::SystemTime};
 
-use crate::constants::BUF_SIZE;
+use crate::constants::{COMMAND_PAYLOAD_SIZE};
 
 enum ReqOrRes {
     Req,
@@ -132,7 +132,7 @@ impl Request {
         // chunk self.payload into chunks
         let mut all_chunked_requests: Vec<ChunkedRequest> = vec![];
 
-        for chunk in self.payload.chunks(BUF_SIZE) {
+        for chunk in self.payload.chunks(COMMAND_PAYLOAD_SIZE) {
             all_chunked_requests.push(ChunkedRequest {
                 creation_timestamp: self.creation_timestamp,
                 cmd: self.cmd.clone(),
@@ -199,7 +199,7 @@ impl Response {
         // chunk self.payload into chunks
         let mut all_chunked_responses: Vec<ChunkedResponse> = vec![];
 
-        for chunk in self.payload.chunks(BUF_SIZE) {
+        for chunk in self.payload.chunks(COMMAND_PAYLOAD_SIZE) {
             all_chunked_responses.push(ChunkedResponse {
                 creation_timestamp: self.creation_timestamp,
                 cmd: self.cmd.clone(),
