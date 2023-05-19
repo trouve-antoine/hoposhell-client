@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
-use super::request_or_response::maybe_string;
+use super::request_or_response::{maybe_string, Request, make_shell_target};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum FileType {
@@ -84,4 +84,14 @@ pub fn process_ls_response(response_payload: &[u8]) {
         }
     }
 
+}
+
+pub fn make_ls_request(make_id: impl Fn() -> String, shell_id: &String, folder_path: &String) -> Request {
+    let payload = folder_path.clone().into_bytes();
+    return Request {
+        cmd: "ls".to_string(),
+        message_id: make_id(),
+        target: make_shell_target(shell_id),
+        payload
+    }
 }

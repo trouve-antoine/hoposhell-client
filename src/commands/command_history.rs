@@ -40,7 +40,6 @@ impl CommandHistory {
                     },
                     None => {
                         let new_request = Request {
-                            creation_timestamp: req.creation_timestamp,
                             cmd: req.cmd,
                             message_id: req.message_id,
                             target: req.target,

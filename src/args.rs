@@ -8,7 +8,13 @@ const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ArgsCommand {
-    CONNECT, SETUP, DOWNLOAD, UPLOAD, VERSION
+    CONNECT, // spawns a shell and connects to the server
+    SETUP, // download server and shell certificates
+    VERSION, // prints the version of the client
+    COMMAND, // runs a command on a remote shell
+    DOWNLOAD, // download a file from a remote shell
+    UPLOAD, // upload a file to a remote shell
+
 }
 
 #[derive(Debug, Clone)]
@@ -28,32 +34,60 @@ pub struct Args {
     pub verify_crt: bool,
     pub command: ArgsCommand,
     pub shell_name: Option<String>,
-    pub file_id: Option<String>,
     pub hoposhell_folder_path: String,
     pub default_cols: u16,
-    pub default_rows: u16
+    pub default_rows: u16,
+    /* */
+    pub command_timeout: Duration,
+    pub extra_args: Vec<String>,
+}
+
+impl Args {
+    pub fn get_shell_id(&self) -> Option<&str> {
+        match &self.shell_name {
+            Some(shell_name) => {
+                return Some(shell_name.as_str());
+            },
+            None => match self.shell_key_path {
+                Some(ref shell_key_path) => {
+                    let shell_key_path = Path::new(shell_key_path);
+                    let shell_key_stem = shell_key_path.file_stem();
+                    match shell_key_stem {
+                        Some(shell_key_stem) => match shell_key_stem.to_str() {
+                            Some(shell_key_stem) => Some(shell_key_stem),
+                            None => None
+                        },
+                        None => return None
+                    }
+                },
+                None => None
+            }
+        }
+    }
 }
 
 /// setup
-/// - hoposhell_client setup <shell id>
-/// connect:
-/// - hoposhell_client <shell id>
-/// - hoposhell_client connect <shell id>
+/// - hopo setup <shell id>
+/// connect to <shell id>
+/// - hopo connect <shell id>
+/// connect to default shell (if there is only one certificate in the hoposhell folder)
+/// - hopo connect
 /// upload (from hoposhell shell)
-/// - hoposhell_client upload <file path>
+/// - hopo upload <local path> <shell id:remote path>
 /// download (from hoposhell shell)
-/// - hoposhell_client download <file id>
+/// - hopo download <shell_id:remote path> <local path>
+/// run a command (e.g. ls) on a remote shell
+/// - hopo command <shell id> <command> <params>
 pub fn parse_args() -> Args {
     let cmd_args: Vec<String> = env::args().collect();
 
     let mut shell_name: Option<String> = None;
     let mut command = ArgsCommand::CONNECT;
+    let mut extra_args: Vec<String> = vec![];
 
     if let Ok(shell_name_) = env::var("HOPOSHELL_SHELL_ID") {
         shell_name = Some(shell_name_);
     }
-
-    let mut file_id: Option<String> = None;
 
     let already_connected = match env::var("HOPOSHELL_CONNECTED") {
         Ok(_) => true,
@@ -73,15 +107,18 @@ pub fn parse_args() -> Args {
                 command = ArgsCommand::SETUP;
             }
             "upload" => {
-                file_id = Some(cmd_args[2].clone());
                 command = ArgsCommand::UPLOAD;
+                extra_args = cmd_args[2..].to_vec();
             }
             "download" => {
-                file_id = Some(cmd_args[2].clone());
                 command = ArgsCommand::DOWNLOAD;
+                extra_args = cmd_args[2..].to_vec();
+            }
+            "command" => {
+                command = ArgsCommand::COMMAND;
+                extra_args = cmd_args[2..].to_vec();
             }
             "version" => {
-                file_id = None;
                 command = ArgsCommand::VERSION;
             }
             _ => {
@@ -120,10 +157,11 @@ pub fn parse_args() -> Args {
         verify_crt: true,
         command,
         shell_name,
-        file_id,
         hoposhell_folder_path: String::from(hoposhell_folder_path.to_str().unwrap()),
         default_cols,
-        default_rows
+        default_rows,
+        command_timeout: Duration::from_secs(60),
+        extra_args
     };
 
     let reconnect_str = env::var("RECONNECT");
@@ -183,6 +221,11 @@ pub fn parse_args() -> Args {
             "no" | "false" | "0" => false,
             _ => true
         };
+    }
+    
+    let command_timeout_ms_str = env::var("COMMAND_TIMEOUT");
+    if let Ok(command_timeout_ms_str) = command_timeout_ms_str {
+        args.command_timeout = parse_duration_from_ms_str(command_timeout_ms_str);
     }
 
     return args;

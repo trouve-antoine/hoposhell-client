@@ -32,7 +32,7 @@ fn get_now() -> u128 {
 }
 
 
-fn make_ssl_conector(server_crt_path: String, shell_key_path: String, verify_crt: bool) -> SslConnector {
+pub fn make_ssl_conector(server_crt_path: &String, shell_key_path: &String, verify_crt: bool) -> SslConnector {
     // Configure OpenSSL
     println!("Use server certificate at {}", server_crt_path);
     println!("Use shell key at {}", shell_key_path);
@@ -57,7 +57,7 @@ fn make_ssl_conector(server_crt_path: String, shell_key_path: String, verify_crt
     return ssl_builder.build();
 }
 
-fn compute_hostname(server_url: &String) -> &str {
+pub fn compute_hostname(server_url: &String) -> &str {
     let parts: Vec<&str> = server_url.split(":").collect();
     return parts[0];
 }
@@ -115,8 +115,8 @@ pub fn main_connect(args: Args) {
 
     let ssl_connector = if args.use_ssl {
         Some(make_ssl_conector(
-            args.server_crt_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.")),
-            args.shell_key_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SHELL_KEY, or specify the shell_id parameter of the connect command.")),
+            &args.server_crt_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.")),
+            &args.shell_key_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SHELL_KEY, or specify the shell_id parameter of the connect command.")),
             args.verify_crt
         ))
     } else {
@@ -206,35 +206,23 @@ fn handle_connection(
 
     loop {
         /* Try to read */
-        let mut buf = [0u8; BUF_SIZE];
-        match stream.read(&mut buf) {
-            Ok(n) => {
-                if n == 0 {
-                    eprintln!("Close stream read thread: the socket has been closed.");
-                    break;
-                }
-                
-                let messages = separate_messages(&mut buf_str, &buf, n);
-
+        match read_messages_from_stream(&mut stream, &mut buf_str) {
+            ReadMessageResult::Ok(messages) => {
                 for message in messages.iter() {
                     tx_to_cmd.lock().unwrap().send(message.clone()).unwrap();
                 }
-            }
-            Err(e) => {
-                match e.kind() {
-                    io::ErrorKind::WouldBlock => {
-                        if read_timeout_sleep.as_millis() > 0 {
-                            eprint!("*");
-                            thread::sleep(read_timeout_sleep);
-                        }
-                    }
-                    _ => {
-                        eprintln!("Got an error while reading the TCP stream -- {:?}", e);
-                        break;        
-                    }
+            },
+            ReadMessageResult::CanContinue => {
+                if read_timeout_sleep.as_millis() > 0 {
+                    eprint!("*");
+                    thread::sleep(read_timeout_sleep);
                 }
+            },
+            ReadMessageResult::CannotContinue => {
+                break;
             }
         }
+
         /* Send output to stream if any */
         match rx_stream.lock().unwrap().recv_timeout(Duration::from_millis(100)) {
             Ok(msg) => {
@@ -282,7 +270,47 @@ fn handle_connection(
     println!("Got disconnected from server.");    
 }
 
-fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mut impl Write) -> io::Result<usize> {
+pub enum ReadMessageResult {
+    Ok(Vec<Message<MessageTypeToCmd>>),
+    CanContinue,
+    CannotContinue
+}
+
+pub fn read_messages_from_stream(
+    mut stream: impl Read + Write,
+    mut buf_str: &mut String
+) -> ReadMessageResult {
+    let mut buf = [0u8; BUF_SIZE];
+    match stream.read(&mut buf) {
+        Ok(n) => {
+            if n == 0 {
+                eprintln!("Close stream read thread: the socket has been closed.");
+                return ReadMessageResult::CannotContinue;
+            }
+            
+            return ReadMessageResult::Ok(
+                separate_messages(&mut buf_str, &buf, n)
+            );
+
+            // for message in messages.iter() {
+            //     tx_to_cmd.lock().unwrap().send(message.clone()).unwrap();
+            // }
+        }
+        Err(e) => {
+            match e.kind() {
+                io::ErrorKind::WouldBlock => {
+                    return ReadMessageResult::CanContinue;
+                }
+                _ => {
+                    eprintln!("Got an error while reading the TCP stream -- {:?}", e);
+                    return ReadMessageResult::CannotContinue;
+                }
+            }
+        }
+    }
+}
+
+pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mut impl Write) -> io::Result<usize> {
     match &msg.content {
         None => { return Ok(0) }
         Some(content) => {

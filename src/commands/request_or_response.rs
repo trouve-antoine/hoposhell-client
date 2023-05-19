@@ -57,7 +57,7 @@ impl StatusCode {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum ChunkType {
     NotLast,
     Last
@@ -116,7 +116,6 @@ impl ChunkedRequest {
 }
 
 pub struct Request {
-    pub creation_timestamp: u64,
     pub cmd: String,
     pub message_id: String,
     pub target: String,
@@ -124,7 +123,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn chunk(self) -> Vec<ChunkedRequest> {
+    pub fn chunk(&self) -> Vec<ChunkedRequest> {
         // Homework:
         // - return an iterator instead
         // - use a slice for the payload to avoid copying data
@@ -134,7 +133,7 @@ impl Request {
 
         for chunk in self.payload.chunks(COMMAND_PAYLOAD_SIZE) {
             all_chunked_requests.push(ChunkedRequest {
-                creation_timestamp: self.creation_timestamp,
+                creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
                 cmd: self.cmd.clone(),
                 message_id: self.message_id.clone(),
                 target: self.target.clone(),
@@ -324,7 +323,6 @@ mod tests {
     #[test]
     fn test_chunked_request_single_chunk() {
         let req = super::Request {
-            creation_timestamp: 0,
             cmd: "cmd".to_string(),
             message_id: "42".to_string(),
             target: "shell:42".to_string(),
@@ -347,7 +345,6 @@ mod tests {
     #[test]
     fn test_chunked_request_two_chunks() {
         let req = super::Request {
-            creation_timestamp: 0,
             cmd: "cmd".to_string(),
             message_id: "42".to_string(),
             target: "shell:42".to_string(),
@@ -371,7 +368,6 @@ mod tests {
     #[test]
     fn test_serialize_and_deserialize_request() {
         let req = super::Request {
-            creation_timestamp: 0,
             cmd: "cmd".to_string(),
             message_id: "42".to_string(),
             target: "shell:42".to_string(),
@@ -426,4 +422,8 @@ mod tests {
             }
         }
     }
+}
+
+pub fn make_shell_target(shell_id: &String) -> String {
+    return format!("shell:{}", shell_id)
 }
