@@ -15,7 +15,7 @@ mod commands {
     pub mod download;
 }
 
-use commands::{ls::{make_ls_request, process_ls_command, process_ls_response}, request_or_response::{ChunkType, Response, ChunkedResponse, Request}, download::{process_download_command, process_download_response}};
+use commands::{ls::{make_ls_request, process_ls_command, process_ls_response}, request_or_response::{ChunkType, Response, ChunkedResponse, Request}, download::{process_download_command, process_download_response, make_download_request}};
 use connect::{send_message_to_stream, read_messages_from_stream, compute_hostname};
 use rand::Rng;
 use message::{MessageTypeToStream, Message};
@@ -130,6 +130,8 @@ fn main_command(args: Args) {
         },
         "download" => {
             // hopo command <shell_id> download <remote_file_path> <local_file_path>
+            let remote_file_path = &args.extra_args[2];
+            req = Some(make_download_request(make_id, &target_shell_id, &remote_file_path));
             process_res = Box::new(|res: Response| {
                 process_download_response(res.payload.as_slice(), &args.extra_args[3]);
             });
