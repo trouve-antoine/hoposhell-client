@@ -1,0 +1,50 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "hopo ls",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hopo",
+                    "--package=hoposhell-client"
+                ],
+                "filter": {
+                    "name": "hopo",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "command",
+                "shell_61b9w0BM8u",
+                "ls",
+                "/tmp"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'hopo'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=hopo",
+                    "--package=hoposhell-client"
+                ],
+                "filter": {
+                    "name": "hopo",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

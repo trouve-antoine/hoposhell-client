@@ -25,8 +25,12 @@ impl CommandProcessor {
                 /* This happens in the loop that processes incomming messages from the server */
 
                 let response_payload = match req.cmd.as_str() {
-                    "ls" => {
-                        super::ls::process_ls_command(&req.payload)
+                    "ls" => match super::ls::process_ls_command(&req.payload) {
+                        Some(payload) => Some(payload.to_string().as_bytes().to_vec()),
+                        None => None
+                    },
+                    "download" => {
+                        super::download::process_download_command(&req.payload)
                     },
                     _ => {
                         None
@@ -40,7 +44,7 @@ impl CommandProcessor {
                             message_id: req.message_id,
                             status_code: StatusCode::Ok,
                             cmd: req.cmd,
-                            payload: response_payload.to_string().as_bytes().to_vec()
+                            payload: response_payload
                         })
                     },
                     None => {

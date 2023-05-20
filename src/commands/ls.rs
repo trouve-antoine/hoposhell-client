@@ -67,8 +67,15 @@ pub fn process_ls_command(
 }
 
 pub fn process_ls_response(response_payload: &[u8]) {
-    let response_payload_json: serde_json::Value = serde_json::from_slice(response_payload).unwrap();
-    let files = response_payload_json["files"].as_array().unwrap();
+    let response_payload_json: serde_json::Value = match serde_json::from_slice(response_payload) {
+        Ok(response_payload_json) => response_payload_json,
+        Err(_) => {
+            eprintln!("Failed to parse ls response");
+            eprintln!("{}", String::from_utf8(response_payload.to_vec()).unwrap());
+            return;
+        }
+    };
+    let files = response_payload_json["entries"].as_array().unwrap();
     
     for file in files {
         let v = file.to_owned();

@@ -12,9 +12,10 @@ mod commands {
     pub mod restart;
     pub mod resize;
     pub mod ls;
+    pub mod download;
 }
 
-use commands::{ls::{make_ls_request, process_ls_command}, request_or_response::{ChunkType, Response, ChunkedResponse, Request}};
+use commands::{ls::{make_ls_request, process_ls_command, process_ls_response}, request_or_response::{ChunkType, Response, ChunkedResponse, Request}, download::{process_download_command, process_download_response}};
 use connect::{send_message_to_stream, read_messages_from_stream, compute_hostname};
 use rand::Rng;
 use message::{MessageTypeToStream, Message};
@@ -116,16 +117,22 @@ fn main_command(args: Args) {
     }; 
 
     let mut req:Option<Request> = None;
-    let mut process_res: Option<fn(Response) -> ()> = None;
+    let mut process_res: Box<dyn Fn(Response)> = Box::new(|res: Response| {});
 
     match command.as_str() {
         "ls" => {
             // hopo command <shell_id> ls <folder_path>
             let folder_path = &args.extra_args[2];
             req = Some(make_ls_request(make_id, &target_shell_id, &folder_path));
-            process_res = Some(|res: Response| {
-                process_ls_command(res.payload.as_slice());
-            } );
+            process_res = Box::new(|res: Response| {
+                process_ls_response(res.payload.as_slice());
+            });
+        },
+        "download" => {
+            // hopo command <shell_id> download <remote_file_path> <local_file_path>
+            process_res = Box::new(|res: Response| {
+                process_download_response(res.payload.as_slice(), &args.extra_args[3]);
+            });
         },
         _ => {
             eprintln!("Command {} is unknown", command);
@@ -134,7 +141,6 @@ fn main_command(args: Args) {
     };
 
     let req = req.unwrap();
-    let process_res = process_res.unwrap();
 
     if let None = args.server_crt_path {
         eprintln!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.");
@@ -166,9 +172,9 @@ fn main_command(args: Args) {
     if let Some(ref ssl_connector) = ssl_connector {
         let hostname = compute_hostname(&args.server_url);
         let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
-        handle_command_connection(&args, ssl_stream, &req, process_res)
+        handle_command_connection(&args, ssl_stream, &req, &process_res)
     } else {
-        handle_command_connection(&args, tcp_stream, &req, process_res)
+        handle_command_connection(&args, tcp_stream, &req, &process_res)
     };
 
     
@@ -178,7 +184,7 @@ fn handle_command_connection(
     args: &Args,
     mut stream: impl Read + Write,
     req: &Request,
-    process_res: fn(Response) -> ()
+    process_res: &impl Fn(Response)
 ) {
     let header_message = Message {
         mtype: MessageTypeToStream::HEADER,
@@ -193,6 +199,7 @@ fn handle_command_connection(
     }
 
     for chunk in req.chunk() {
+        eprintln!("Send request: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
         let msg_payload = chunk.to_message_payload();
         let msg = Message {
             mtype: MessageTypeToStream::COMMAND,
@@ -248,6 +255,8 @@ fn handle_command_connection(
         eprintln!("Got no response");
         std::process::exit(-1);
     };
+
+    eprintln!("#chunk: {}", all_res.len());
 
     let res = Response {
         creation_timestamp: all_res[0].creation_timestamp,
@@ -360,6 +369,7 @@ fn parse_command_response_message(
             return ParseCommandResponseResult::CanContinue;
             },
             ChunkedRequestOrResponse::Response(res) => {
+                eprintln!("Got a response: {} {} {:?}", res.cmd, res.message_id, res.chunk_type);
                 if res.message_id != req.message_id {
                     eprintln!("Got a response with a different message_id: ignore");
                     return ParseCommandResponseResult::CanContinue;

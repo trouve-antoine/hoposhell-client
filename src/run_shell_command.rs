@@ -82,6 +82,7 @@ pub fn run_command(
                                     /* consume and send the response back */
                                     eprintln!("Got a command: {:?}", res.cmd);
                                     for chunk in res.chunk() {
+                                        eprintln!("Send request: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
                                         let msg = Message {
                                             mtype: MessageTypeToStream::COMMAND,
                                             content: Some(chunk.to_message_payload())
