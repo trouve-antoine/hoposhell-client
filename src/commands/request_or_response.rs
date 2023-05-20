@@ -181,6 +181,7 @@ impl ChunkedResponse {
     }
 }
 
+#[derive(Debug)]
 pub struct Response {
     pub creation_timestamp: u64,
     pub cmd: String,

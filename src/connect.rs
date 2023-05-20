@@ -291,10 +291,6 @@ pub fn read_messages_from_stream(
             return ReadMessageResult::Ok(
                 separate_messages(&mut buf_str, &buf, n)
             );
-
-            // for message in messages.iter() {
-            //     tx_to_cmd.lock().unwrap().send(message.clone()).unwrap();
-            // }
         }
         Err(e) => {
             match e.kind() {

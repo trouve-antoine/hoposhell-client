@@ -180,13 +180,31 @@ fn handle_command_connection(
     req: &Request,
     process_res: fn(Response) -> ()
 ) {
+    let header_message = Message {
+        mtype: MessageTypeToStream::HEADER,
+        content: Some(format!("v{}/command", args.version).as_bytes().to_vec())
+    };
+    match send_message_to_stream(&header_message, &mut stream) {
+        Ok(_) => {},
+        Err(e) => {
+            eprintln!("Unable to send header message: {}", e);
+            std::process::exit(-1);
+        }
+    }
+
     for chunk in req.chunk() {
         let msg_payload = chunk.to_message_payload();
         let msg = Message {
             mtype: MessageTypeToStream::COMMAND,
             content: Some(msg_payload)
         };
-        send_message_to_stream(&msg, &mut stream);
+        match send_message_to_stream(&msg, &mut stream) {
+            Ok(_) => {},
+            Err(e) => {
+                eprintln!("Unable to send command message: {}", e);
+                std::process::exit(-1);
+            }
+        }
     }
 
     let mut buf_str = String::from("");

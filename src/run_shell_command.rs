@@ -7,8 +7,6 @@ use std::{
 
 use portable_pty as pty;
 
-use crate::{commands::request_or_response::RequestOrResponse, constants::MESSAGE_PARTS_SEPARATOR};
-
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
 use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
 
@@ -82,6 +80,7 @@ pub fn run_command(
                                 /* A generic command */
                                 if let Some(res) = commands.process_msg(&c) {
                                     /* consume and send the response back */
+                                    eprintln!("Got a command: {:?}", res.cmd);
                                     for chunk in res.chunk() {
                                         let msg = Message {
                                             mtype: MessageTypeToStream::COMMAND,
@@ -89,6 +88,8 @@ pub fn run_command(
                                         };
                                         send_message(msg);
                                     }
+                                } else {
+                                    eprintln!("Got an invalid command.");
                                 }
                             }
                         }
