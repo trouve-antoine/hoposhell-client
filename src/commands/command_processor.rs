@@ -33,10 +33,11 @@ impl CommandProcessor {
                         super::download::process_download_command(&req.payload)
                     },
                     _ => {
+                        eprintln!("[{}] Got request with unknown command: {:?}", req.message_id, req.cmd);
                         None
                     }
                 };
-                
+
                 match response_payload {
                     Some(response_payload) => {
                         return Some(Response {
@@ -48,23 +49,13 @@ impl CommandProcessor {
                         })
                     },
                     None => {
+                        eprintln!("[{}] Generated an empty response payload. Maybe there was an error when processing the request.", req.message_id);
                         return None;
                     }
                 }
             },
             RequestOrResponse::Response(res) => {
-                /* Got a response from a request we made to the cloud or another shell */
-                /* This happens inside a call to "hopo command" */
-
-                match res.cmd.as_str() {
-                    "ls" => {
-                        super::ls::process_ls_response(&res.payload);
-                    },
-                    cmd => {
-                        eprintln!("Got response with unknown command: {:?}", cmd);
-                    }
-                }
-
+                eprintln!("[{}] Got a {} response from the server, but was expecting a request only.", res.message_id, res.cmd);
                 return None;
             },
             RequestOrResponse::None => {

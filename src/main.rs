@@ -133,7 +133,13 @@ fn main_command(args: Args) {
             let remote_file_path = &args.extra_args[2];
             req = Some(make_download_request(make_id, &target_shell_id, &remote_file_path));
             process_res = Box::new(|res: Response| {
-                process_download_response(res.payload.as_slice(), &args.extra_args[3]);
+                if args.extra_args.len() < 4 {
+                    eprintln!("Please specify the local file path");
+                    let local_path = String::from(Path::new("./").join(Path::new(&args.extra_args[2]).file_name().unwrap()).to_str().unwrap());
+                    process_download_response(res.payload.as_slice(), &local_path);
+                } else {
+                    process_download_response(res.payload.as_slice(), &args.extra_args[3]);
+                };
             });
         },
         _ => {

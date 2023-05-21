@@ -1,7 +1,3 @@
-use std::fmt::Debug;
-use serde::{Serialize, Deserialize};
-use serde_json;
-
 use super::request_or_response::{maybe_string, Request, make_shell_target};
 
 pub fn process_download_command(
@@ -15,6 +11,9 @@ pub fn process_download_command(
     }
 
     let file_path = file_path.unwrap();
+
+    let file_path = String::from(shellexpand::tilde(file_path.as_str()));
+
     let file_path = std::path::Path::new(&file_path);
 
     if !file_path.is_file() {

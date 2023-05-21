@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, os::unix::prelude::MetadataExt};
 use serde::{Serialize, Deserialize};
 use serde_json;
 
@@ -27,43 +27,46 @@ pub fn process_ls_command(
 ) -> Option<serde_json::Value> {
     let folder_path = maybe_string(Some(payload));
 
-    match folder_path {
-        Some(folder_path) => match std::fs::read_dir(&folder_path) {
-            Ok(entries) => {
-                println!("Now listing files in folder: {}", &folder_path);
-                let mut files = vec![];
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        match entry.metadata() {
-                            Ok(infos) => {
-                                files.push(FileInfos {
-                                    name: entry.file_name().into_string().unwrap(),
-                                    file_type: if infos.is_dir() { FileType::Folder } else { FileType::File },
-                                    creation_timestamp: infos.created().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                                    modification_timestamp: infos.modified().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                                    size_in_bytes: infos.len()
-                                });
-                            },
-                            Err(_) => {
-                                /* Cannot get file infos: ignore */
-                            }
-                        }
-                    }
+    if folder_path.is_none() {
+        eprintln!("No folder path provided");
+        return None;
+    }
+
+    let folder_path = folder_path.unwrap();
+    let folder_path = String::from(shellexpand::tilde(folder_path.as_str()));
+    let entries = std::fs::read_dir(&folder_path);
+
+    if entries.is_err() {
+        eprintln!("Tried and failed to list folder: {}", &folder_path);
+        return None;
+    }
+
+    let entries = entries.unwrap();
+
+    println!("Now listing files in folder: {}", &folder_path);
+
+    let mut files = vec![];
+    for entry in entries {
+        if let Ok(entry) = entry {
+            match entry.metadata() {
+                Ok(infos) => {
+                    files.push(FileInfos {
+                        name: entry.file_name().into_string().unwrap(),
+                        file_type: if infos.is_dir() { FileType::Folder } else { FileType::File },
+                        creation_timestamp: infos.created().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                        modification_timestamp: infos.modified().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                        size_in_bytes: infos.size()
+                    });
+                },
+                Err(_) => {
+                    /* Cannot get file infos: ignore */
                 }
-                return Some(serde_json::json!({
-                    "entries": files
-                }));
-            },
-            Err(_) => {
-                println!("Tried and failed to list folder: {}", &folder_path);
-                return None;
             }
-        },
-        None => {
-            println!("Got an invalid ls request.");
-            return None;
         }
     }
+    return Some(serde_json::json!({
+        "entries": files
+    }));
 }
 
 pub fn process_ls_response(response_payload: &[u8]) {
@@ -90,7 +93,6 @@ pub fn process_ls_response(response_payload: &[u8]) {
             }
         }
     }
-
 }
 
 pub fn make_ls_request(make_id: impl Fn() -> String, shell_id: &String, folder_path: &String) -> Request {

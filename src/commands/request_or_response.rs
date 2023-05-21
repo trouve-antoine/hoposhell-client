@@ -115,6 +115,7 @@ impl ChunkedRequest {
     }
 }
 
+#[derive(Debug)]
 pub struct Request {
     pub cmd: String,
     pub message_id: String,
