@@ -44,15 +44,7 @@ pub fn main_command(args: Args) {
             let folder_path = &args.extra_args[2];
             req = Some(ls::make_ls_request(make_id, &target_shell_id, &folder_path));
             process_res = Box::new(|res: Response| {
-                match zstd::decode_all(res.payload.as_slice()) {
-                    Ok(decompressed) => {
-                        ls::process_ls_response(decompressed.as_slice());
-                    },
-                    Err(e) => {
-                        eprintln!("Unable to decompress ls response: {}", e);
-                        std::process::exit(-1);
-                    }
-                }
+                ls::process_ls_response(&res.payload);
             });
         },
         download::COMMAND_NAME => {
@@ -60,21 +52,13 @@ pub fn main_command(args: Args) {
             let remote_file_path = &args.extra_args[2];
             req = Some(download::make_download_request(make_id, &target_shell_id, &remote_file_path));
             process_res = Box::new(|res: Response| {
-                match zstd::decode_all(res.payload.as_slice()) {
-                    Ok(decompressed) => {
-                        if args.extra_args.len() < 4 {
-                            eprintln!("Please specify the local file path");
-                            let local_path = String::from(Path::new("./").join(Path::new(&args.extra_args[2]).file_name().unwrap()).to_str().unwrap());
-                            download::process_download_response(decompressed.as_slice(), &local_path);
-                        } else {
-                            download::process_download_response(decompressed.as_slice(), &args.extra_args[3]);
-                        };
-                    },
-                    Err(e) => {
-                        eprintln!("Unable to decompress download response: {}", e);
-                        std::process::exit(-1);
-                    }
-                }
+                if args.extra_args.len() < 4 {
+                    eprintln!("Please specify the local file path");
+                    let local_path = String::from(Path::new("./").join(Path::new(&args.extra_args[2]).file_name().unwrap()).to_str().unwrap());
+                    download::process_download_response(&res.payload, &local_path);
+                } else {
+                    download::process_download_response(&res.payload, &args.extra_args[3]);
+                };
             });
         },
         glob::COMMAND_NAME => {
@@ -82,15 +66,7 @@ pub fn main_command(args: Args) {
             let glob_pattern = &args.extra_args[2];
             req = Some(glob::make_glob_request(make_id, &target_shell_id, &glob_pattern));
             process_res = Box::new(|res: Response| {
-                match zstd::decode_all(res.payload.as_slice()) {
-                    Ok(decompressed) => {
-                        glob::process_glob_response(decompressed.as_slice());
-                    },
-                    Err(e) => {
-                        eprintln!("Unable to decompress glob response: {}", e);
-                        std::process::exit(-1);
-                    }
-                }
+                glob::process_glob_response(&res.payload);
             });
         },
         _ => {
@@ -225,7 +201,22 @@ fn handle_command_connection(
         payload: all_res.iter().map(|res| res.payload.clone()).into_iter().flatten().collect()
     };
 
-    process_res(res);
+    match zstd::decode_all(res.payload.as_slice()) {
+        Ok(decompressed) => {
+            // glob::process_glob_response(decompressed.as_slice());
+            process_res(Response {
+                creation_timestamp: res.creation_timestamp,
+                cmd: res.cmd,
+                message_id: res.message_id,
+                status_code: res.status_code,
+                payload: decompressed
+            });
+        },
+        Err(e) => {
+            eprintln!("Unable to decompress glob response: {}", e);
+            std::process::exit(-1);
+        }
+    }
 }
 
 fn parse_command_response_message(

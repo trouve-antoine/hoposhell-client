@@ -319,7 +319,7 @@ pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer:
                 MessageTypeToStream::COMMAND => format!("{}-ccc---\n", content_64)
             };
             let encoded_content = encoded_content.as_bytes();
-            eprintln!("- send message to tcp stream with size: {}", encoded_content.len());
+            // eprintln!("- send message to tcp stream with size: {}", encoded_content.len());
             return stream_writer.write(encoded_content);
         }
     }
