@@ -12,9 +12,6 @@ pub enum ArgsCommand {
     SETUP, // download server and shell certificates
     VERSION, // prints the version of the client
     COMMAND, // runs a command on a remote shell
-    DOWNLOAD, // download a file from a remote shell
-    UPLOAD, // upload a file to a remote shell
-
 }
 
 #[derive(Debug, Clone)]
@@ -105,14 +102,6 @@ pub fn parse_args() -> Args {
             "setup" => {
                 shell_name = Some(cmd_args[2].clone());
                 command = ArgsCommand::SETUP;
-            }
-            "upload" => {
-                command = ArgsCommand::UPLOAD;
-                extra_args = cmd_args[2..].to_vec();
-            }
-            "download" => {
-                command = ArgsCommand::DOWNLOAD;
-                extra_args = cmd_args[2..].to_vec();
             }
             "command" => {
                 command = ArgsCommand::COMMAND;

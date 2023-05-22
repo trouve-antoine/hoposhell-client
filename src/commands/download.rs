@@ -1,5 +1,7 @@
 use super::request_or_response::{maybe_string, Request, make_shell_target};
 
+pub const COMMAND_NAME: &str = "download";
+
 pub fn process_download_command(
     payload: &[u8],
 ) -> Option<Vec<u8>> {

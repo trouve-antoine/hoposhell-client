@@ -1,7 +1,8 @@
-use std::{borrow::Cow, time::SystemTime};
+use std::time::SystemTime;
 
-use super::command_history::{CommandHistory};
-use super::request_or_response::{RequestOrResponse, Response, StatusCode, ChunkedRequest, ChunkedResponse};
+use super::command_history::CommandHistory;
+use super::request_or_response::{RequestOrResponse, Response, StatusCode};
+use super::{glob, ls, download};
 
 pub struct CommandProcessor {
     history: CommandHistory
@@ -25,12 +26,16 @@ impl CommandProcessor {
                 /* This happens in the loop that processes incomming messages from the server */
 
                 let response_payload = match req.cmd.as_str() {
-                    "ls" => match super::ls::process_ls_command(&req.payload) {
+                    ls::COMMAND_NAME => match ls::process_ls_command(&req.payload) {
                         Some(payload) => Some(payload.to_string().as_bytes().to_vec()),
                         None => None
                     },
-                    "download" => {
-                        super::download::process_download_command(&req.payload)
+                    download::COMMAND_NAME => {
+                        download::process_download_command(&req.payload)
+                    },
+                    glob::COMMAND_NAME => match glob::process_glob_command(&req.payload) {
+                        Some(payload) => Some(payload.to_string().as_bytes().to_vec()),
+                        None => None
                     },
                     _ => {
                         eprintln!("[{}] Got request with unknown command: {:?}", req.message_id, req.cmd);
@@ -38,7 +43,25 @@ impl CommandProcessor {
                     }
                 };
 
-                match response_payload {
+                // let _payload = response_payload.clone().unwrap();
+                // let _test = zstd::encode_all(_payload.as_slice(), 4);
+                // eprintln!("ZLIB compression: {} -> {}", _payload.len(), _test.unwrap().len());
+
+                let payload = match response_payload {
+                    Some(payload) => match zstd::encode_all(payload.as_slice(), 4) {
+                        Ok(payload) => Some(payload),
+                        Err(_) => {
+                            eprintln!("[{}] Failed to compress response payload.", req.message_id);
+                            return None;
+                        }
+                    },
+                    None => {
+                        eprintln!("[{}] Failed to process request with command: {:?}", req.message_id, req.cmd);
+                        return None;
+                    }
+                };
+
+                match payload {
                     Some(response_payload) => {
                         return Some(Response {
                             creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),

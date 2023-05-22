@@ -4,7 +4,7 @@ use serde_json;
 
 use super::request_or_response::{maybe_string, Request, make_shell_target};
 
-pub const COMMAND_NAME: &str = "ls";
+pub const COMMAND_NAME: &str = "glob";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum FileType {
@@ -24,28 +24,29 @@ pub struct FileInfos {
     pub size_in_bytes: u64
 }
 
-pub fn process_ls_command(
+pub fn process_glob_command(
     payload: &[u8],
 ) -> Option<serde_json::Value> {
-    let folder_path = maybe_string(Some(payload));
+    let glob_pattern = maybe_string(Some(payload));
 
-    if folder_path.is_none() {
-        eprintln!("No folder path provided");
+    if glob_pattern.is_none() {
+        eprintln!("No glob_pattern path provided");
         return None;
     }
 
-    let folder_path = folder_path.unwrap();
-    let folder_path = String::from(shellexpand::tilde(folder_path.as_str()));
-    let entries = std::fs::read_dir(&folder_path);
+    let glob_pattern = glob_pattern.unwrap();
+    let glob_pattern = String::from(shellexpand::tilde(glob_pattern.as_str()));
+
+    let entries = glob::glob(&glob_pattern);
 
     if entries.is_err() {
-        eprintln!("Tried and failed to list folder: {}", &folder_path);
+        eprintln!("Tried and failed to glob pattern: {}", &glob_pattern);
         return None;
     }
 
     let entries = entries.unwrap();
 
-    println!("Now listing files in folder: {}", &folder_path);
+    println!("Now globing pattern: {}", &glob_pattern);
 
     let mut files = vec![];
     for entry in entries {
@@ -53,7 +54,10 @@ pub fn process_ls_command(
             match entry.metadata() {
                 Ok(infos) => {
                     files.push(FileInfos {
-                        name: entry.file_name().into_string().unwrap(),
+                        name: match entry.as_path().to_str() {
+                            Some(path) => String::from(path),
+                            None => String::from(""),
+                        },
                         file_type: if infos.is_dir() { FileType::Folder } else { FileType::File },
                         creation_timestamp: infos.created().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
                         modification_timestamp: infos.modified().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
@@ -62,6 +66,7 @@ pub fn process_ls_command(
                 },
                 Err(_) => {
                     /* Cannot get file infos: ignore */
+                    eprintln!("During glob, ignore file {:?}", entry.as_path());
                 }
             }
         }
@@ -71,7 +76,7 @@ pub fn process_ls_command(
     }));
 }
 
-pub fn process_ls_response(response_payload: &[u8]) {
+pub fn process_glob_response(response_payload: &[u8]) {
     let response_payload_json: serde_json::Value = match serde_json::from_slice(response_payload) {
         Ok(response_payload_json) => response_payload_json,
         Err(_) => {
@@ -97,10 +102,10 @@ pub fn process_ls_response(response_payload: &[u8]) {
     }
 }
 
-pub fn make_ls_request(make_id: impl Fn() -> String, shell_id: &String, folder_path: &String) -> Request {
-    let payload = folder_path.clone().into_bytes();
+pub fn make_glob_request(make_id: impl Fn() -> String, shell_id: &String, glob_pattern: &String) -> Request {
+    let payload = glob_pattern.clone().into_bytes();
     return Request {
-        cmd: "ls".to_string(),
+        cmd: COMMAND_NAME.to_string(),
         message_id: make_id(),
         target: make_shell_target(shell_id),
         payload
