@@ -10,10 +10,10 @@ use portable_pty as pty;
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
 use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
 
-pub fn run_command(
-    shell_id: Option<String>,
-    _hoposhell_folder: String,
-    cmd: String,
+pub fn run_shell(
+    shell_id: Option<&str>,
+    _hoposhell_folder: &String,
+    cmd: &String,
     cols: u16,
     rows: u16,
     tx_to_stream: Arc<Mutex<Sender<Message<MessageTypeToStream>>>>,
@@ -35,7 +35,7 @@ pub fn run_command(
     /* Update env vars for child shell */
     if let Some(shell_id) = shell_id {
         cmd.env("HOPOSHELL_SHELL_ID", &shell_id);
-        cmd.env("HOPOSHELL_CONNECTED", &shell_id);
+        cmd.env("HOPOSHELL_CONNECTED", "1");
     } else {
         cmd.env("HOPOSHELL_CONNECTED", "1");
     }

@@ -21,7 +21,7 @@ use crate::commands::resize::make_size_message;
 use super::constants::BUF_SIZE;
 
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream, separate_messages};
-use super::run_shell_command::{run_command};
+use super::run_shell::run_shell;
 use super::args::Args;
 
 fn get_now() -> u128 {
@@ -96,10 +96,10 @@ pub fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
-    let master_pty = run_command(
-        args.shell_name,
-        args.hoposhell_folder_path,
-        args.cmd,
+    let master_pty = run_shell(
+        args.get_shell_id(),
+        &args.hoposhell_folder_path,
+        &args.cmd,
         args.default_cols, args.default_rows,
         tx_to_stream, rx_cmd,
         history_of_messages_to_stream.clone()

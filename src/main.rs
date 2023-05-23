@@ -1,6 +1,6 @@
 mod args;
 mod message;
-mod run_shell_command;
+mod run_shell;
 mod connect;
 mod constants;
 mod commands {
