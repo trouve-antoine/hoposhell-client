@@ -55,8 +55,14 @@ pub fn process_ls_command(
                     files.push(FileInfos {
                         name: entry.file_name().into_string().unwrap(),
                         file_type: if infos.is_dir() { FileType::Folder } else { FileType::File },
-                        creation_timestamp: infos.created().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                        modification_timestamp: infos.modified().unwrap().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                        creation_timestamp: match infos.created() {
+                            Ok(created) => created.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                            Err(_) => 0
+                        },
+                        modification_timestamp: match infos.modified() {
+                            Ok(modified) => modified.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                            Err(_) => 0
+                        },
                         size_in_bytes: infos.size()
                     });
                 },

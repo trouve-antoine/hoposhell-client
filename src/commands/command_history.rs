@@ -1,4 +1,4 @@
-use std::{borrow::Cow, time::{SystemTime, UNIX_EPOCH}};
+use std::{time::{SystemTime, UNIX_EPOCH}};
 
 use super::request_or_response::{ChunkedRequestOrResponse, RequestOrResponse, Request, Response, ChunkType};
 

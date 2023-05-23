@@ -35,8 +35,8 @@ pub fn main_command(args: Args) {
         return format!("{}:{}", current_shell_id, random_str)
     }; 
 
-    let mut req:Option<Request> = None;
-    let mut process_res: Box<dyn Fn(Response)> = Box::new(|res: Response| {});
+    let req:Option<Request>;
+    let process_res: Box<dyn Fn(Response)>;
 
     match command.as_str() {
         ls::COMMAND_NAME => {
@@ -239,7 +239,7 @@ fn parse_command_response_message(
         let content: Vec<u8> = message.content.clone().unwrap();
 
         match ChunkedRequestOrResponse::deserialize(&content) {
-            ChunkedRequestOrResponse::Request(req_or_res) => {
+            ChunkedRequestOrResponse::Request(_req_or_res) => {
                 eprint!("Got a request, but was waiting for a resposnse: ignore...");
                 return ParseCommandResponseResult::CanContinue;
             },

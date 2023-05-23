@@ -1,4 +1,3 @@
-pub const HALF_BUF_SIZE: usize = 1024 * 8; // used in tests
 pub const BUF_SIZE: usize = 1024 * 16;
 pub const COMMAND_PAYLOAD_SIZE: usize = 1024 * 8; // Must be smaller than BUF_SIZE
 

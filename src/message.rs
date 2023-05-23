@@ -1,4 +1,4 @@
-use super::constants::{BUF_SIZE, MESSAGE_PARTS_SEPARATOR};
+use super::constants::{BUF_SIZE};
 use base64::engine::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 

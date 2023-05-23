@@ -320,8 +320,6 @@ pub fn maybe_string(v: Option<&[u8]>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::{BUF_SIZE, HALF_BUF_SIZE};
-
     #[test]
     fn test_chunked_request_single_chunk() {
         let req = super::Request {
@@ -336,7 +334,7 @@ mod tests {
         assert_eq!(chunked_reqs.len(), 1);
         let first_chunk = &chunked_reqs[0];
 
-        assert_eq!(first_chunk.creation_timestamp, 0);
+        assert_ne!(first_chunk.creation_timestamp, 0);
         assert_eq!(first_chunk.cmd, "cmd");
         assert_eq!(first_chunk.message_id, "42");
         assert_eq!(first_chunk.target, "shell:42");
@@ -350,7 +348,7 @@ mod tests {
             cmd: "cmd".to_string(),
             message_id: "42".to_string(),
             target: "shell:42".to_string(),
-            payload: [0; BUF_SIZE+HALF_BUF_SIZE].to_vec()
+            payload: [0; crate::constants::COMMAND_PAYLOAD_SIZE+200].to_vec()
         };
 
         let chunked_reqs = req.chunk();
@@ -364,8 +362,8 @@ mod tests {
         assert_eq!(first_chunk.message_id, second_chunk.message_id);
         assert_eq!(first_chunk.target, second_chunk.target);
         assert_eq!(first_chunk.chunk_type, super::ChunkType::NotLast);
-        assert_eq!(first_chunk.payload.len(), BUF_SIZE);
-        assert_eq!(second_chunk.payload.len(), HALF_BUF_SIZE);
+        assert_eq!(first_chunk.payload.len(), crate::constants::COMMAND_PAYLOAD_SIZE);
+        assert_eq!(second_chunk.payload.len(), 200);
     }
     #[test]
     fn test_serialize_and_deserialize_request() {

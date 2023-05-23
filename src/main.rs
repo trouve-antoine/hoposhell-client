@@ -109,23 +109,6 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     // std::fs::copy(hoposhell_exe_path, hoposhell_folder_path.join("hopo")).unwrap();
 }
 
-struct ShellIdAndPath {
-    shell_id: String,
-    path: String
-}
-
-fn split_shell_id_and_path(p: &String) -> Option<ShellIdAndPath> {
-    let splitted_p = p.split(":").collect::<Vec<&str>>();
-    if splitted_p.len() != 2 {
-        return None;
-    } else {
-        return Some(ShellIdAndPath {
-            shell_id: splitted_p[0].to_string(),
-            path: splitted_p[1].to_string()
-        });
-    }
-}
-
 fn make_random_id(n: usize) -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)

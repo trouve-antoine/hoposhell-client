@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-use std::path;
 use std::sync::{Arc, Mutex};
 
 use portable_pty as pty;
