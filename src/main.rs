@@ -12,6 +12,8 @@ mod commands {
     pub mod restart;
     pub mod resize;
     /* */
+    pub mod file_list;
+    /* */
     pub mod ls;
     pub mod download;
     pub mod glob;
@@ -31,8 +33,6 @@ use crate::commands::send_command_hanlder::main_command;
 
 fn main() {
     let args = args::parse_args();
-
-    println!("Got command {:?}", args.command);
 
     if args.already_connected && args.command == ArgsCommand::CONNECT {
         eprintln!("Got command connect but the shell is already connected");
@@ -55,7 +55,7 @@ fn main_setup(args: Args) {
     /* */
     match args.shell_name {
         Some(shell_name) => {
-            println!("Get credentials for shell {}", shell_name);
+            eprintln!("Get credentials for shell {}", shell_name);
             get_shell_credentials(
                 shell_name, args.api_url, 
                 args.server_crt_path.unwrap(),
@@ -74,7 +74,7 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     reqwest::blocking::get(format!("{}/shell-credentials/request/{}", api_url, shell_name)).unwrap();
     
     let mut login_code = String::new();
-    println!("Enter the login code that shows on the hoposhell GUI: ");
+    eprintln!("Enter the login code that shows on the hoposhell GUI: ");
     std::io::stdin().read_line(&mut login_code).unwrap();
     let credentials = reqwest::blocking::get(format!("{}/shell-credentials/confirmation/{}/{}", api_url, shell_name, login_code)).unwrap()
         .json::<HashMap<String, String>>().unwrap();
@@ -84,29 +84,20 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
 
     let server_crt_folder_path = Path::new(&server_crt_path).parent().unwrap();
     if !server_crt_folder_path.exists() {
-        println!("💾 Create folder {}", server_crt_folder_path.to_str().unwrap());
+        eprintln!("💾 Create folder {}", server_crt_folder_path.to_str().unwrap());
         std::fs::create_dir_all(server_crt_folder_path).unwrap();
     }
-    println!("💾 Write server crt in file {}", server_crt_path);
+    eprintln!("💾 Write server crt in file {}", server_crt_path);
     std::fs::write(&server_crt_path, server_crt).expect("Unable to write server crt file");
     
     
     let shell_key_folder_path = Path::new(&shell_key_path).parent().unwrap();
     if !shell_key_folder_path.exists() {
-        println!("💾 Create folder {}", shell_key_folder_path.to_str().unwrap());
+        eprintln!("💾 Create folder {}", shell_key_folder_path.to_str().unwrap());
         std::fs::create_dir_all(shell_key_folder_path).unwrap();
     }
-    println!("💾 Write shell key in file {}", shell_key_path);
+    eprintln!("💾 Write shell key in file {}", shell_key_path);
     std::fs::write(&shell_key_path, shell_key).expect("Unable to write shell key file");
-    
-    // println!("💾 Prepare hopo command {}", shell_key_path);
-    // let hoposhell_folder_path = Path::new(&hoposhell_folder_path);
-    // if !hoposhell_folder_path.exists() {
-    //     println!("💾 Create folder {}", hoposhell_folder_path.to_str().unwrap());
-    //     std::fs::create_dir_all(hoposhell_folder_path).unwrap();
-    // }
-    // let hoposhell_exe_path =  std::env::current_exe().unwrap();
-    // std::fs::copy(hoposhell_exe_path, hoposhell_folder_path.join("hopo")).unwrap();
 }
 
 fn make_random_id(n: usize) -> String {

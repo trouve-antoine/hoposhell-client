@@ -57,7 +57,13 @@ impl CommandProcessor {
                     },
                     None => {
                         eprintln!("[{}] Failed to process request with command: {:?}", req.message_id, req.cmd);
-                        return None;
+                        return Some(Response {
+                            creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                            message_id: req.message_id,
+                            status_code: StatusCode::IncorrectParams,
+                            cmd: req.cmd,
+                            payload: vec![]
+                        })
                     }
                 };
 
@@ -72,8 +78,14 @@ impl CommandProcessor {
                         })
                     },
                     None => {
-                        eprintln!("[{}] Generated an empty response payload. Maybe there was an error when processing the request.", req.message_id);
-                        return None;
+                        eprintln!("[{}] Generated a None response payload: there was an error when processing the request response payload.", req.message_id);
+                        return Some(Response {
+                            creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                            message_id: req.message_id,
+                            status_code: StatusCode::InternalError,
+                            cmd: req.cmd,
+                            payload: vec![]
+                        })
                     }
                 }
             },

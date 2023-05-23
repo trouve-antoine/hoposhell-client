@@ -34,8 +34,8 @@ fn get_now() -> u128 {
 
 pub fn make_ssl_conector(server_crt_path: &String, shell_key_path: &String, verify_crt: bool) -> SslConnector {
     // Configure OpenSSL
-    println!("Use server certificate at {}", server_crt_path);
-    println!("Use shell key at {}", shell_key_path);
+    eprintln!("Use server certificate at {}", server_crt_path);
+    eprintln!("Use shell key at {}", shell_key_path);
 
     let mut ssl_builder = ssl::SslConnector::builder(ssl::SslMethod::tls_client()).unwrap();
     
@@ -51,7 +51,7 @@ pub fn make_ssl_conector(server_crt_path: &String, shell_key_path: &String, veri
     );
 
     if !verify_crt {
-        println!("!! I will not verify the server CRT");
+        eprintln!("!! I will not verify the server CRT");
         ssl_builder.set_verify(ssl::SslVerifyMode::NONE);
     }
     return ssl_builder.build();
@@ -71,14 +71,14 @@ pub fn main_connect(args: Args) {
         let all_files = list_files_in_folder(&args.hoposhell_folder_path, &shell_pem_regex);
         match all_files.len() {
             0 => {
-                println!("There are no shell certificate in folder {}", &args.hoposhell_folder_path);
+                eprintln!("There are no shell certificate in folder {}", &args.hoposhell_folder_path);
             },
             1 => {
-                println!("Using default shell key in folder {}: {}", &args.hoposhell_folder_path, all_files[0]);
+                eprintln!("Using default shell key in folder {}: {}", &args.hoposhell_folder_path, all_files[0]);
                 args.shell_key_path = Some(all_files[0].clone());
             }
             _ => {
-                println!("There are more than on shell certificate in folder {}. Cannot determine default.", &args.hoposhell_folder_path);
+                eprintln!("There are more than on shell certificate in folder {}. Cannot determine default.", &args.hoposhell_folder_path);
             }
         }
     }
@@ -124,10 +124,10 @@ pub fn main_connect(args: Args) {
     };
     
     loop {
-        println!("Tries to connect to: {}", args.server_url);
+        eprintln!("Tries to connect to: {}", args.server_url);
         match TcpStream::connect(args.server_url.as_str()) {
             Ok(tcp_stream) => {
-                println!("Connected to server");
+                eprintln!("Connected to server");
 
                 tcp_stream.set_read_timeout(Some(args.read_timeout)).expect("Could not set the read timeout of the tcp stream");
 
@@ -264,10 +264,10 @@ fn handle_connection(
             }
         }
         last_keep_alive = Some(now);
-        println!("[keep alive]")
+        eprintln!("[keep alive]")
     }
 
-    println!("Got disconnected from server.");    
+    eprintln!("Got disconnected from server.");    
 }
 
 pub enum ReadMessageResult {

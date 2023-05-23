@@ -4,6 +4,8 @@ use std::{
     time::Duration,
 };
 
+use crate::constants::OutputFormat;
+
 const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
 #[derive(Debug, PartialEq, Clone)]
@@ -37,6 +39,7 @@ pub struct Args {
     /* */
     pub command_timeout: Duration,
     pub extra_args: Vec<String>,
+    pub format: OutputFormat
 }
 
 impl Args {
@@ -59,6 +62,19 @@ impl Args {
                 },
                 None => None
             }
+        }
+    }
+
+    pub fn consume_extra_arg(&mut self, xa: &str) -> bool {
+        let xa = String::from(xa);
+        
+        let xa_index = self.extra_args.iter().position(|x| *x == xa);
+        match xa_index {
+            Some(xa_index) => {
+                self.extra_args.remove(xa_index);
+                return true;
+            },
+            None => false
         }
     }
 }
@@ -150,8 +166,13 @@ pub fn parse_args() -> Args {
         default_cols,
         default_rows,
         command_timeout: Duration::from_secs(60),
-        extra_args
+        extra_args,
+        format: OutputFormat::Text
     };
+
+    if args.consume_extra_arg("--json") {
+        args.format = OutputFormat::Json;
+    }
 
     let reconnect_str = env::var("RECONNECT");
     if let Ok(reconnect_str) = reconnect_str {

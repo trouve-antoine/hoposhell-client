@@ -1,28 +1,12 @@
-use std::{fmt::Debug, os::unix::prelude::MetadataExt};
-use serde::{Serialize, Deserialize};
+use std::os::unix::prelude::MetadataExt;
 use serde_json;
 
-use super::request_or_response::{maybe_string, Request, make_shell_target};
+use crate::{commands::file_list::{FileInfos, FileType}, constants::OutputFormat};
+
+use super::{request_or_response::{maybe_string, Request, make_shell_target}, file_list::print_file_list};
 
 pub const COMMAND_NAME: &str = "ls";
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum FileType {
-     #[serde(rename = "file")]
-    File,
-     #[serde(rename = "dir")]
-    Folder
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileInfos {
-    pub name: String,
-    pub file_type: FileType,
-    pub creation_timestamp: u64,
-    pub modification_timestamp: u64,
-    pub size_in_bytes: u64
-}
 
 pub fn process_ls_command(
     payload: &[u8],
@@ -45,7 +29,7 @@ pub fn process_ls_command(
 
     let entries = entries.unwrap();
 
-    println!("Now listing files in folder: {}", &folder_path);
+    eprintln!("Now listing files in folder: {}", &folder_path);
 
     let mut files = vec![];
     for entry in entries {
@@ -77,30 +61,8 @@ pub fn process_ls_command(
     }));
 }
 
-pub fn process_ls_response(response_payload: &[u8]) {
-    let response_payload_json: serde_json::Value = match serde_json::from_slice(response_payload) {
-        Ok(response_payload_json) => response_payload_json,
-        Err(_) => {
-            eprintln!("Failed to parse ls response");
-            eprintln!("{}", String::from_utf8(response_payload.to_vec()).unwrap());
-            return;
-        }
-    };
-    let files = response_payload_json["entries"].as_array().unwrap();
-    
-    for file in files {
-        let v = file.to_owned();
-        let file = serde_json::from_value::<FileInfos>(v);
-
-        match file {
-            Ok(file) => {
-                println!("{} {:?} {} {} {}", file.name, file.file_type, file.creation_timestamp, file.modification_timestamp, file.size_in_bytes);
-            },
-            Err(_) => {
-                /* Cannot parse: ignore */
-            }
-        }
-    }
+pub fn process_ls_response(response_payload: &[u8], format: OutputFormat) {
+    print_file_list(response_payload, format);
 }
 
 pub fn make_ls_request(make_id: impl Fn() -> String, shell_id: &String, folder_path: &String) -> Request {

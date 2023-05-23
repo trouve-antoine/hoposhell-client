@@ -3,3 +3,9 @@ pub const COMMAND_PAYLOAD_SIZE: usize = 1024 * 8; // Must be smaller than BUF_SI
 
 pub const MAX_MESSAGE_HISTORY_SIZE: usize = 2048;
 pub const MESSAGE_PARTS_SEPARATOR: u8 = b'/';
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum OutputFormat {
+    Json,
+    Text
+}

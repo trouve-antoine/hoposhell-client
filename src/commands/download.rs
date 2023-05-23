@@ -8,7 +8,7 @@ pub fn process_download_command(
     let file_path = maybe_string(Some(payload));
 
     if file_path.is_none() {
-        println!("No file path provided");
+        eprintln!("No file path provided");
         return None;
     }
 
@@ -33,10 +33,10 @@ pub fn process_download_command(
 pub fn process_download_response(response_payload: &[u8], target_path: &String) {
     match std::fs::write(target_path, response_payload) {
         Ok(_) => {
-            println!("Downloaded file to {}", target_path);
+            eprintln!("Downloaded file to {}", target_path);
         },
         Err(_) => {
-            println!("Failed to write file to {}", target_path);
+            eprintln!("Failed to write file to {}", target_path);
             return;
         }
     }

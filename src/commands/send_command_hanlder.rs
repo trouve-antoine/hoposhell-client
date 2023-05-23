@@ -31,7 +31,7 @@ pub fn main_command(args: Args) {
     let current_shell_id = current_shell_id.unwrap();
 
     let make_id = || {  
-        let random_str = make_random_id(4);
+        let random_str = make_random_id(8);
         return format!("{}:{}", current_shell_id, random_str)
     }; 
 
@@ -44,7 +44,7 @@ pub fn main_command(args: Args) {
             let folder_path = &args.extra_args[2];
             req = Some(ls::make_ls_request(make_id, &target_shell_id, &folder_path));
             process_res = Box::new(|res: Response| {
-                ls::process_ls_response(&res.payload);
+                ls::process_ls_response(&res.payload, args.format);
             });
         },
         download::COMMAND_NAME => {
@@ -66,7 +66,7 @@ pub fn main_command(args: Args) {
             let glob_pattern = &args.extra_args[2];
             req = Some(glob::make_glob_request(make_id, &target_shell_id, &glob_pattern));
             process_res = Box::new(|res: Response| {
-                glob::process_glob_response(&res.payload);
+                glob::process_glob_response(&res.payload, args.format);
             });
         },
         _ => {
@@ -128,13 +128,15 @@ fn handle_command_connection(
     match send_message_to_stream(&header_message, &mut stream) {
         Ok(_) => {},
         Err(e) => {
-            eprintln!("Unable to send header message: {}", e);
+            eprintln!("[{}] Unable to send header message: {}", req.message_id, e);
             std::process::exit(-1);
         }
     }
 
-    for chunk in req.chunk() {
-        eprintln!("Send request: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
+    let chunks = req.chunk();
+    eprintln!("[{}] Send request {} with #chunks: {}", req.message_id, req.cmd, chunks.len());
+    for chunk in chunks {
+        // eprintln!("- send: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
         let msg_payload = chunk.to_message_payload();
         let msg = Message {
             mtype: MessageTypeToStream::COMMAND,
@@ -143,7 +145,7 @@ fn handle_command_connection(
         match send_message_to_stream(&msg, &mut stream) {
             Ok(_) => {},
             Err(e) => {
-                eprintln!("Unable to send command message: {}", e);
+                eprintln!("[{}] Unable to send command message: {}", req.message_id, e);
                 std::process::exit(-1);
             }
         }
@@ -155,7 +157,7 @@ fn handle_command_connection(
 
     loop {
         if start_time.elapsed() > args.command_timeout {
-            eprintln!("Command timeout");
+            eprintln!("[{}] Command timeout", req.message_id);
             std::process::exit(-1);
         }
 
@@ -180,19 +182,18 @@ fn handle_command_connection(
                 }
             },
             ReadMessageResult::CannotContinue => {
-                eprint!("Got an error when reading the tcp stream.");
+                eprint!("[{}] Got an error when reading the tcp stream.", req.message_id);
                 std::process::exit(-1);
             }
         }
     }
 
     if all_res.len() == 0 {
-        eprintln!("Got no response");
+        eprintln!("[{}] Got no response", req.message_id);
         std::process::exit(-1);
     };
 
-    eprintln!("#chunk: {}", all_res.len());
-
+    
     let res = Response {
         creation_timestamp: all_res[0].creation_timestamp,
         cmd: all_res[0].cmd.clone(),
@@ -200,6 +201,8 @@ fn handle_command_connection(
         status_code: all_res[0].status_code,
         payload: all_res.iter().map(|res| res.payload.clone()).into_iter().flatten().collect()
     };
+
+    eprintln!("[{}] Total number of response chunk: {}", res.message_id, all_res.len());
 
     match zstd::decode_all(res.payload.as_slice()) {
         Ok(decompressed) => {
@@ -230,10 +233,6 @@ fn parse_command_response_message(
             eprintln!("Unexpected message type: {:?}", message.mtype);
             return ParseCommandResponseResult::Error;
         }
-        if message.content.is_none() {
-            eprintln!("Got an empty message: ignore");
-            return ParseCommandResponseResult::CanContinue;
-        }
 
         // TODO: avoid clone
         let content: Vec<u8> = message.content.clone().unwrap();
@@ -248,13 +247,13 @@ fn parse_command_response_message(
             return ParseCommandResponseResult::CanContinue;
             },
             ChunkedRequestOrResponse::Response(res) => {
-                eprintln!("Got a response: {} {} {:?}", res.cmd, res.message_id, res.chunk_type);
+                eprintln!("[{}] Got a response: {} (chunk type: {:?})", res.message_id, res.cmd, res.chunk_type);
                 if res.message_id != req.message_id {
-                    eprintln!("Got a response with a different message_id: ignore");
+                    eprintln!("[{}] Got a response with a unexpected message_id: {}. Ignore...", req.message_id, res.message_id);
                     return ParseCommandResponseResult::CanContinue;
                 }
                 if res.status_code != StatusCode::Ok {
-                    eprintln!("Got a response with status {:?}: exit", res.status_code);
+                    eprintln!("[{}] Got a response with status {:?}: exit", res.message_id, res.status_code);
                     return ParseCommandResponseResult::Error;
                 }
                 let chunk_type = res.chunk_type.clone();

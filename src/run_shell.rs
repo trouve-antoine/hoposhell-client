@@ -80,9 +80,9 @@ pub fn run_shell(
                                 /* A generic command */
                                 if let Some(res) = commands.process_msg(&c) {
                                     /* consume and send the response back */
-                                    eprintln!("Got a command: {:?}", res.cmd);
+                                    eprintln!("[{}] Send response of command {:?}.", &res.message_id, res.cmd);
                                     for chunk in res.chunk() {
-                                        eprintln!("Send response: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
+                                        // eprintln!("- send response chunk: {} {} {:?}", chunk.cmd, chunk.message_id, chunk.chunk_type);
                                         let msg = Message {
                                             mtype: MessageTypeToStream::COMMAND,
                                             content: Some(chunk.to_message_payload())

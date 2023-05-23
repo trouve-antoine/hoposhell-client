@@ -31,7 +31,8 @@ impl ReqOrRes {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum StatusCode {
     Ok,
-    IncorrectParams
+    IncorrectParams,
+    InternalError,
 }
 
 impl StatusCode {
@@ -42,6 +43,7 @@ impl StatusCode {
                 Ok(code) => match code {
                     200 => Some(StatusCode::Ok),
                     400 => Some(StatusCode::IncorrectParams),
+                    500 => Some(StatusCode::InternalError),
                     _ => None
                 },
                 Err(_) => None
@@ -52,7 +54,8 @@ impl StatusCode {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             StatusCode::Ok => b"200".to_vec(),
-            StatusCode::IncorrectParams => b"400".to_vec()
+            StatusCode::IncorrectParams => b"400".to_vec(),
+            StatusCode::InternalError => b"500".to_vec()
         }
     }
 }
@@ -200,7 +203,14 @@ impl Response {
         // chunk self.payload into chunks
         let mut all_chunked_responses: Vec<ChunkedResponse> = vec![];
 
-        for chunk in self.payload.chunks(COMMAND_PAYLOAD_SIZE) {
+        let payload_chunks = match self.payload.len() {
+            0 => vec!["".as_bytes()],
+            _ => self.payload.chunks(COMMAND_PAYLOAD_SIZE).collect::<Vec<&[u8]>>()
+        };
+
+        eprintln!("[{}] #chunks: {:?}", self.message_id, payload_chunks.len());
+
+        for chunk in payload_chunks {
             all_chunked_responses.push(ChunkedResponse {
                 creation_timestamp: self.creation_timestamp,
                 cmd: self.cmd.clone(),
