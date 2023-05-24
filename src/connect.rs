@@ -254,9 +254,9 @@ fn handle_connection(
             }
         }
 
-        if verbose {}
+        if verbose {
             eprintln!("-- send keep alive message to tcp stream with size: {}", keep_alive_payload.len());
-    }
+        }
         
         match stream.write(keep_alive_payload) {
             Ok(_) => {}
