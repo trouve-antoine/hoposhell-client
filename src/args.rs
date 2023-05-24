@@ -168,7 +168,7 @@ pub fn parse_args() -> Args {
         default_cols,
         default_rows,
         verbose: match env::var("VERBOSE") {
-            Ok(x) => true,
+            Ok(_) => true,
             Err(_) => false
         },
         command_timeout: Duration::from_secs(60),
