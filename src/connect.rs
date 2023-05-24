@@ -129,10 +129,15 @@ pub fn main_connect(args: Args) {
             Ok(tcp_stream) => {
                 eprintln!("Connected to server");
 
-                tcp_stream.set_read_timeout(Some(args.read_timeout)).expect("Could not set the read timeout of the tcp stream");
+                if !args.read_timeout.is_zero() {
+                    tcp_stream.set_read_timeout(Some(args.read_timeout)).expect("Could not set the read timeout of the tcp stream");
+                }
 
                 if let Some(ref ssl_connector) = ssl_connector {
-                    let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
+                    let ssl_stream = ssl_connector.connect(hostname, &tcp_stream).unwrap();
+                    if args.read_timeout.is_zero() {
+                        tcp_stream.set_nonblocking(true).expect("Could not set the tcp stream to non-blocking mode");
+                    }
                     handle_connection(
                         ssl_stream,
                         tx_to_cmd.clone(), rx_stream.clone(),
@@ -144,6 +149,9 @@ pub fn main_connect(args: Args) {
                         args.verbose
                     )
                 } else {
+                    if args.read_timeout.is_zero() {
+                        tcp_stream.set_nonblocking(true).expect("Could not set the tcp stream to non-blocking mode");
+                    }
                     handle_connection(
                         tcp_stream, tx_to_cmd.clone(), rx_stream.clone(),
                         &args.version,
