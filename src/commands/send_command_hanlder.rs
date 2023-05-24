@@ -107,9 +107,9 @@ pub fn main_command(args: Args) {
     if let Some(ref ssl_connector) = ssl_connector {
         let hostname = compute_hostname(&args.server_url);
         let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
-        handle_command_connection(&args, ssl_stream, &req, &process_res)
+        handle_command_connection(&args, ssl_stream, &req, &process_res, args.verbose)
     } else {
-        handle_command_connection(&args, tcp_stream, &req, &process_res)
+        handle_command_connection(&args, tcp_stream, &req, &process_res, args.verbose)
     };
 
     
@@ -119,13 +119,14 @@ fn handle_command_connection(
     args: &Args,
     mut stream: impl Read + Write,
     req: &Request,
-    process_res: &impl Fn(Response)
+    process_res: &impl Fn(Response),
+    verbose: bool
 ) {
     let header_message = Message {
         mtype: MessageTypeToStream::HEADER,
         content: Some(format!("v{}/command", args.version).as_bytes().to_vec())
     };
-    match send_message_to_stream(&header_message, &mut stream) {
+    match send_message_to_stream(&header_message, &mut stream, verbose) {
         Ok(_) => {},
         Err(e) => {
             eprintln!("[{}] Unable to send header message: {}", req.message_id, e);
@@ -142,7 +143,7 @@ fn handle_command_connection(
             mtype: MessageTypeToStream::COMMAND,
             content: Some(msg_payload)
         };
-        match send_message_to_stream(&msg, &mut stream) {
+        match send_message_to_stream(&msg, &mut stream, verbose) {
             Ok(_) => {},
             Err(e) => {
                 eprintln!("[{}] Unable to send command message: {}", req.message_id, e);

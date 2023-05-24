@@ -140,7 +140,8 @@ pub fn main_connect(args: Args) {
                         history_of_messages_to_stream.clone(),
                         master_pty.clone(),
                         args.keep_alive,
-                        args.read_timeout_sleep
+                        args.read_timeout_sleep,
+                        args.verbose
                     )
                 } else {
                     handle_connection(
@@ -148,7 +149,8 @@ pub fn main_connect(args: Args) {
                         &args.version,
                         history_of_messages_to_stream.clone(),
                         master_pty.clone(),
-                        args.keep_alive, args.read_timeout_sleep
+                        args.keep_alive, args.read_timeout_sleep,
+                        args.verbose
                     );
                 }
 
@@ -174,24 +176,25 @@ fn handle_connection(
     history_of_messages_to_stream: Arc<Mutex<Vec<Message<MessageTypeToStream>>>>,
     master_pty: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     keep_alive_delta: Duration,
-    read_timeout_sleep: Duration)
-{
+    read_timeout_sleep: Duration,
+    verbose: bool
+) {
     let header_msg = Message {
         mtype: MessageTypeToStream::HEADER,
         content: Some(format!("v{}", version).as_bytes().to_vec())
     };
-    if let Err(_) = send_message_to_stream(&header_msg, &mut stream) {
+    if let Err(_) = send_message_to_stream(&header_msg, &mut stream, verbose) {
         eprintln!("Unable to send headers to stream...");
         return;
     }
 
-    if let Err(_) = send_message_to_stream(&make_size_message(&master_pty.lock().unwrap()), &mut stream) {
+    if let Err(_) = send_message_to_stream(&make_size_message(&master_pty.lock().unwrap()), &mut stream, verbose) {
         eprintln!("Unable to send headers to stream...");
         return;
     }
 
     for msg in history_of_messages_to_stream.lock().unwrap().iter() {
-        match send_message_to_stream(&msg, &mut stream) {
+        match send_message_to_stream(&msg, &mut stream, verbose) {
             Ok(_) => { }
             Err(e) => {
                 eprint!("Got an error while writing history to stream: {:?}", e);
@@ -226,7 +229,7 @@ fn handle_connection(
         /* Send output to stream if any */
         match rx_stream.lock().unwrap().recv_timeout(Duration::from_millis(100)) {
             Ok(msg) => {
-                match send_message_to_stream(&msg, &mut stream){
+                match send_message_to_stream(&msg, &mut stream, verbose){
                     Ok(_) => { }
                     Err(e) => {
                         eprintln!("Got an error while writing content to stream: {:?}", e);
@@ -306,7 +309,7 @@ pub fn read_messages_from_stream(
     }
 }
 
-pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mut impl Write) -> io::Result<usize> {
+pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer: &mut impl Write, verbose: bool) -> io::Result<usize> {
     match &msg.content {
         None => { return Ok(0) }
         Some(content) => {
@@ -319,7 +322,9 @@ pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer:
                 MessageTypeToStream::COMMAND => format!("{}-ccc---\n", content_64)
             };
             let encoded_content = encoded_content.as_bytes();
-            // eprintln!("- send message to tcp stream with size: {}", encoded_content.len());
+            if verbose {
+                println!("- send message to tcp stream with size: {}", encoded_content.len());
+            }
             return stream_writer.write(encoded_content);
         }
     }

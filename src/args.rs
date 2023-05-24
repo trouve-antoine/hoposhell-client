@@ -37,6 +37,8 @@ pub struct Args {
     pub default_cols: u16,
     pub default_rows: u16,
     /* */
+    pub verbose: bool,
+    /* */
     pub command_timeout: Duration,
     pub extra_args: Vec<String>,
     pub format: OutputFormat
@@ -165,6 +167,10 @@ pub fn parse_args() -> Args {
         hoposhell_folder_path: String::from(hoposhell_folder_path.to_str().unwrap()),
         default_cols,
         default_rows,
+        verbose: match env::var("VERBOSE") {
+            Ok(x) => true,
+            Err(_) => false
+        },
         command_timeout: Duration::from_secs(60),
         extra_args,
         format: OutputFormat::Text
