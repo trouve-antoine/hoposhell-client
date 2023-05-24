@@ -207,9 +207,11 @@ fn handle_connection(
 
     let mut last_keep_alive: Option<u128> = None;
 
+    let keep_alive_payload = "---\n".as_bytes();
+
     loop {
         /* Try to read */
-        match read_messages_from_stream(&mut stream, &mut buf_str) {
+        match read_messages_from_stream(&mut stream, &mut buf_str, verbose) {
             ReadMessageResult::Ok(messages) => {
                 for message in messages.iter() {
                     tx_to_cmd.lock().unwrap().send(message.clone()).unwrap();
@@ -251,8 +253,10 @@ fn handle_connection(
                 continue;
             }
         }
+
+        println!("- send keep alive message to tcp stream with size: {}", keep_alive_payload.len());
         
-        match stream.write("---\n".as_bytes()) {
+        match stream.write(keep_alive_payload) {
             Ok(_) => {}
             Err(e) => {
                 eprint!("Got an error while writing in keep alive: {:?}", e);
@@ -267,7 +271,6 @@ fn handle_connection(
             }
         }
         last_keep_alive = Some(now);
-        eprintln!("[keep alive]")
     }
 
     eprintln!("Got disconnected from server.");    
@@ -281,7 +284,8 @@ pub enum ReadMessageResult {
 
 pub fn read_messages_from_stream(
     mut stream: impl Read + Write,
-    mut buf_str: &mut String
+    mut buf_str: &mut String,
+    verbose: bool
 ) -> ReadMessageResult {
     let mut buf = [0u8; BUF_SIZE];
     match stream.read(&mut buf) {
@@ -289,6 +293,10 @@ pub fn read_messages_from_stream(
             if n == 0 {
                 eprintln!("Close stream read thread: the socket has been closed.");
                 return ReadMessageResult::CannotContinue;
+            }
+
+            if verbose {
+                eprintln!("-- got {} bytes from stream.", n);
             }
             
             return ReadMessageResult::Ok(

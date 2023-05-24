@@ -162,7 +162,7 @@ fn handle_command_connection(
             std::process::exit(-1);
         }
 
-        match read_messages_from_stream(&mut stream, &mut buf_str) {
+        match read_messages_from_stream(&mut stream, &mut buf_str, verbose) {
             ReadMessageResult::Ok(messages) => {
                 match parse_command_response_message(&req, &messages, &mut all_res) {
                     ParseCommandResponseResult::CanContinue => {
