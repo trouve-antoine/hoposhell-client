@@ -254,7 +254,9 @@ fn handle_connection(
             }
         }
 
-        println!("- send keep alive message to tcp stream with size: {}", keep_alive_payload.len());
+        if verbose {}
+            eprintln!("-- send keep alive message to tcp stream with size: {}", keep_alive_payload.len());
+    }
         
         match stream.write(keep_alive_payload) {
             Ok(_) => {}
@@ -331,7 +333,7 @@ pub fn send_message_to_stream(msg: &Message<MessageTypeToStream>, stream_writer:
             };
             let encoded_content = encoded_content.as_bytes();
             if verbose {
-                println!("- send message to tcp stream with size: {}", encoded_content.len());
+                eprintln!("-- send message to tcp stream with size: {}", encoded_content.len());
             }
             return stream_writer.write(encoded_content);
         }
