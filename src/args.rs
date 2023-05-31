@@ -155,7 +155,7 @@ pub fn parse_args() -> Args {
         server_url: String::from("api.hoposhell.com:10000"),
         api_url: String::from("https://api.hoposhell.com"),
         keep_alive:Duration::from_millis(5000),
-        read_timeout: Duration::from_millis(50),
+        read_timeout: Duration::ZERO,
         read_timeout_sleep: Duration::ZERO,
         server_crt_path: Some(String::from(hoposhell_folder_path.join("server.crt").to_str().unwrap())),
         shell_key_path: if let Some(shell_name) = shell_name.as_ref() {
