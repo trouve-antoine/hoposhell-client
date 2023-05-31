@@ -47,7 +47,7 @@ pub fn main_command(args: Args) {
                 ls::process_ls_response(&res.payload, args.format);
             });
         },
-        download::COMMAND_NAME => {
+        download::COMMAND_NAME | download::COMMAND_ALIAS => {
             // hopo command <shell_id> download <remote_file_path> <local_file_path>
             let remote_file_path = &args.extra_args[2];
             req = Some(download::make_download_request(make_id, &target_shell_id, &remote_file_path));
@@ -154,7 +154,10 @@ fn handle_command_connection(
 
     let mut buf_str = String::from("");
     let mut all_res: Vec<ChunkedResponse> = vec![];
-    let start_time = std::time::Instant::now();
+    let mut start_time = std::time::Instant::now();
+
+    eprint!("Recieved: 0 bytes\r");
+    let mut total_bytes_received = 0;
 
     loop {
         if start_time.elapsed() > args.command_timeout {
@@ -164,9 +167,11 @@ fn handle_command_connection(
 
         match read_messages_from_stream(&mut stream, &mut buf_str, verbose) {
             ReadMessageResult::Ok(messages) => {
+                start_time = std::time::Instant::now();
                 match parse_command_response_message(&req, &messages, &mut all_res) {
                     ParseCommandResponseResult::CanContinue => {
-                        /* NOP */
+                        total_bytes_received += messages.iter().fold(0, |acc, msg| acc + msg.content.as_ref().unwrap().len());
+                        eprint!("Recieved: {} bytes\r", total_bytes_received);
                     },
                     ParseCommandResponseResult::ReachedLastChunk => {
                         break;
@@ -248,7 +253,7 @@ fn parse_command_response_message(
             return ParseCommandResponseResult::CanContinue;
             },
             ChunkedRequestOrResponse::Response(res) => {
-                eprintln!("[{}] Got a response: {} (chunk type: {:?})", res.message_id, res.cmd, res.chunk_type);
+                // eprintln!("[{}] Got a response: {} (chunk type: {:?})", res.message_id, res.cmd, res.chunk_type);
                 if res.message_id != req.message_id {
                     eprintln!("[{}] Got a response with a unexpected message_id: {}. Ignore...", req.message_id, res.message_id);
                     return ParseCommandResponseResult::CanContinue;

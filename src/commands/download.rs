@@ -1,6 +1,7 @@
 use super::request_or_response::{maybe_string, Request, make_shell_target};
 
 pub const COMMAND_NAME: &str = "download";
+pub const COMMAND_ALIAS: &str = "cp";
 
 pub fn process_download_command(
     payload: &[u8],
