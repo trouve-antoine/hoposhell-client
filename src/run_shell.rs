@@ -8,7 +8,7 @@ use std::{
 use portable_pty as pty;
 
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
-use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE};
+use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE, WAIT_TIME_RETRY_CNX_MS};
 
 pub fn run_shell(
     shell_id: Option<&str>,
@@ -128,7 +128,14 @@ pub fn run_shell(
                     history_of_messages.push(msg.clone());
                 }
 
-                tx_to_stream_stdout.lock().unwrap().send(msg).unwrap();
+                let mut send_res = tx_to_stream_stdout.lock().unwrap().send(msg);
+                while send_res.is_err() {
+                    let msg = send_res.err().unwrap().0;
+                    eprintln!("Unable to send message to stream. Will try again.");
+                    send_res = tx_to_stream_stdout.lock().unwrap().send(msg);
+                    thread::sleep(std::time::Duration::from_millis(WAIT_TIME_RETRY_CNX_MS));
+                }
+
             }
             Err(e) => {
                 eprintln!("Got an error wile reading stdout: {:?}", e);

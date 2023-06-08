@@ -16,7 +16,7 @@ use regex::Regex;
 use expect_exit::{Expected};
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
-use crate::commands::resize::make_size_message;
+use crate::{commands::resize::make_size_message, constants::WAIT_TIME_RETRY_CNX_MS};
 
 use super::constants::BUF_SIZE;
 
@@ -237,15 +237,19 @@ fn handle_connection(
         }
 
         /* Send output to stream if any */
-        match rx_stream.lock().unwrap().recv_timeout(Duration::from_millis(100)) {
+        match rx_stream.lock().unwrap().recv_timeout(Duration::from_millis(WAIT_TIME_RETRY_CNX_MS)) {
             Ok(msg) => {
-                match send_message_to_stream(&msg, &mut stream, verbose){
-                    Ok(_) => { }
-                    Err(e) => {
-                        eprintln!("Got an error while writing content to stream: {:?}", e);
-                        return;
+                let mut send_res = send_message_to_stream(&msg, &mut stream, verbose);
+                while let Err(e) = send_res.as_ref() {
+                    if e.kind() != io::ErrorKind::WouldBlock {
+                        eprintln!("Got an error while writing content to stream: {:?}.", e);
+                        break;
                     }
+                    eprintln!("Got an error while writing content to stream: {:?}. Will try again.", e);
+                    thread::sleep(std::time::Duration::from_millis(WAIT_TIME_RETRY_CNX_MS));
+                    send_res = send_message_to_stream(&msg, &mut stream, verbose);
                 }
+                if send_res.is_err() { break; }
             },
             Err(e) => {
                 if e != mpsc::RecvTimeoutError::Timeout {
