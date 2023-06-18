@@ -7,12 +7,14 @@ use std::{
 
 use portable_pty as pty;
 
+use crate::constants::PATH_VAR_SEP;
+
 use super::message::{Message, MessageTypeToCmd, MessageTypeToStream};
 use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE, WAIT_TIME_RETRY_CNX_MS};
 
 pub fn run_shell(
     shell_id: Option<&str>,
-    _hoposhell_folder: &String,
+    hoposhell_folder: &String,
     cmd: &String,
     cols: u16,
     rows: u16,
@@ -31,6 +33,8 @@ pub fn run_shell(
     }).unwrap();
 
     let mut cmd = pty::CommandBuilder::new(cmd);
+    let cmd_path = cmd.get_env("PATH").unwrap_or("".as_ref()).to_str().unwrap_or("");
+    cmd.env("PATH", format!("{}{}{}{}bin", cmd_path, PATH_VAR_SEP, hoposhell_folder, std::path::MAIN_SEPARATOR));
     
     /* Update env vars for child shell */
     if let Some(shell_id) = shell_id {
@@ -43,7 +47,7 @@ pub fn run_shell(
     let _pty_child = pty_pair.slave.spawn_command(cmd).expect("Unable to spawn shell");
 
     let reader = pty_pair.master.try_clone_reader().expect("Unable to get a pty reader");
-    let writer = pty_pair.master.try_clone_writer().expect("Unable to get a writer");
+    let writer = pty_pair.master.take_writer().expect("Unable to get a writer");
     
     let master = Arc::new(Mutex::new(pty_pair.master));
     
@@ -60,6 +64,7 @@ pub fn run_shell(
             if let Ok(msg) = rx_cmd.lock().unwrap().recv() {
                 if msg.mtype == MessageTypeToCmd::STDIN {
                     if let Some(content) = msg.content {
+                        // eprintln!("Got stdin message: {:?}", content);
                         cmd_stdin.lock().unwrap().write(&content).unwrap();
                     }
                 } else if msg.mtype == MessageTypeToCmd::COMMAND {

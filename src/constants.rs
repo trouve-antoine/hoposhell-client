@@ -1,3 +1,5 @@
+pub const PATH_VAR_SEP: &str = ":";
+
 pub const BUF_SIZE: usize = 1024 * 16;
 pub const COMMAND_PAYLOAD_SIZE: usize = 1024 * 8; // Must be smaller than BUF_SIZE
 

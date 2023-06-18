@@ -14,6 +14,7 @@ pub enum ArgsCommand {
     SETUP, // download server and shell certificates
     VERSION, // prints the version of the client
     COMMAND, // runs a command on a remote shell
+    POPULATE, // populate the bin folder
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +129,9 @@ pub fn parse_args() -> Args {
             "version" => {
                 command = ArgsCommand::VERSION;
             }
+            "populate" => {
+                command = ArgsCommand::POPULATE;
+            },
             _ => {
                 shell_name = Some(cmd_args[1].clone());
                 command = ArgsCommand::CONNECT;

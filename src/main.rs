@@ -3,6 +3,7 @@ mod message;
 mod run_shell;
 mod connect;
 mod constants;
+mod populate;
 mod commands {
     pub mod send_command_hanlder;
     pub mod request_or_response;
@@ -47,6 +48,9 @@ fn main() {
         },
         ArgsCommand::COMMAND => {
             main_command(args);
+        },
+        ArgsCommand::POPULATE => {
+            populate::main_populate(args);
         }
     }
 }

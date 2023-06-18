@@ -245,7 +245,7 @@ fn handle_connection(
                         eprintln!("Got an error while writing content to stream: {:?}.", e);
                         break;
                     }
-                    eprintln!("Got an error while writing content to stream: {:?}. Will try again.", e);
+                    // eprintln!("Got an error while writing content to stream: {:?}. Will try again.", e);
                     thread::sleep(std::time::Duration::from_millis(WAIT_TIME_RETRY_CNX_MS));
                     send_res = send_message_to_stream(&msg, &mut stream, verbose);
                 }
