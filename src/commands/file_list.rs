@@ -1,3 +1,5 @@
+use std::os::unix::prelude::MetadataExt;
+
 use std::{fmt::Debug};
 use serde::{Serialize, Deserialize};
 
@@ -19,6 +21,24 @@ pub struct FileInfos {
     pub creation_timestamp: u64,
     pub modification_timestamp: u64,
     pub size_in_bytes: u64
+}
+
+impl FileInfos {
+    pub fn from_metadata(metadata: std::fs::Metadata, file_name: String) -> FileInfos {
+        FileInfos {
+            name: file_name,
+            file_type: if metadata.is_dir() { FileType::Folder } else { FileType::File },
+            creation_timestamp: match metadata.created() {
+                Ok(created) => created.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                Err(_) => 0
+            },
+            modification_timestamp: match metadata.modified() {
+                Ok(modified) => modified.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                Err(_) => 0
+            },
+            size_in_bytes: metadata.size()
+        }
+    }
 }
 
 pub fn print_file_list(response_payload: &[u8], format: OutputFormat) {

@@ -1,7 +1,6 @@
-use std::os::unix::prelude::MetadataExt;
 use serde_json;
 
-use crate::{commands::{file_list::{FileInfos, FileType}, command_error::make_error}, constants::OutputFormat};
+use crate::{commands::{file_list::FileInfos, command_error::make_error}, constants::OutputFormat};
 
 use super::{request_or_response::{maybe_string, Request, make_shell_target}, file_list::print_file_list};
 
@@ -19,44 +18,33 @@ pub fn process_ls_command(
 
     let folder_path = folder_path.unwrap();
     let folder_path = String::from(shellexpand::tilde(folder_path.as_str()));
-    let entries = std::fs::read_dir(&folder_path);
 
-    if entries.is_err() {
-        let error = if let Some(err) = entries.err() { err } else {
-            std::io::Error::new(std::io::ErrorKind::Other, "Unknown error")
-        };
-        return Result::Err(make_error(format!("Cannot list folder {}: {}", &folder_path, error.to_string()).as_str()));
+    let glob_res = glob::glob(folder_path.as_str());
+    if glob_res.is_err() {
+        return Result::Err(make_error(format!("Invalid pattern {}: {}", &folder_path, glob_res.err().unwrap().to_string()).as_str()));
     }
 
-    let entries = entries.unwrap();
-
-    eprintln!("Now listing files in folder: {}", &folder_path);
+    let glob_res = glob_res.unwrap();
 
     let mut files = vec![];
-    for entry in entries {
-        if let Ok(entry) = entry {
-            match entry.metadata() {
-                Ok(infos) => {
-                    files.push(FileInfos {
-                        name: entry.file_name().into_string().unwrap(),
-                        file_type: if infos.is_dir() { FileType::Folder } else { FileType::File },
-                        creation_timestamp: match infos.created() {
-                            Ok(created) => created.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                            Err(_) => 0
-                        },
-                        modification_timestamp: match infos.modified() {
-                            Ok(modified) => modified.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                            Err(_) => 0
-                        },
-                        size_in_bytes: infos.size()
-                    });
-                },
-                Err(_) => {
-                    /* Cannot get file infos: ignore */
+    for entry in glob_res {
+        match entry {
+            Ok(path) => {
+                match path.metadata() {
+                    Ok(infos) => {
+                        files.push(FileInfos::from_metadata(infos, path.into_os_string().into_string().unwrap()));  
+                    },
+                    Err(_) => {
+                        /* Cannot get file infos: ignore */
+                    }
                 }
+            },
+            Err(_) => {
+                eprintln!("Got invalid glob entry: {:?}", entry)
             }
         }
     }
+
     return Result::Ok(serde_json::json!({
         "entries": files
     }));
