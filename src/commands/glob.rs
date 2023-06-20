@@ -3,18 +3,17 @@ use serde_json;
 
 use crate::constants::OutputFormat;
 
-use super::{request_or_response::{maybe_string, Request, make_shell_target}, file_list::{FileInfos, FileType, print_file_list}};
+use super::{request_or_response::{maybe_string, Request, make_shell_target}, file_list::{FileInfos, FileType, print_file_list}, command_error::make_error};
 
 pub const COMMAND_NAME: &str = "glob";
 
 pub fn process_glob_command(
     payload: &[u8],
-) -> Option<serde_json::Value> {
+) -> Result<serde_json::Value, serde_json::Value> {
     let glob_pattern = maybe_string(Some(payload));
 
     if glob_pattern.is_none() {
-        eprintln!("No glob_pattern path provided");
-        return None;
+        return Result::Err(make_error("No glob_pattern path provided"));
     }
 
     let glob_pattern = glob_pattern.unwrap();
@@ -23,8 +22,11 @@ pub fn process_glob_command(
     let entries = glob::glob(&glob_pattern);
 
     if entries.is_err() {
-        eprintln!("Tried and failed to glob pattern: {}", &glob_pattern);
-        return None;
+        if let Some(err) = entries.err() {
+            return Result::Err(make_error(format!("Cannot glob pattern {}: {}", &glob_pattern, err.to_string()).as_str()));
+        } else {
+            return Result::Err(make_error(format!("Cannot glob pattern {}: Unknown error", &glob_pattern).as_str()));
+        };
     }
 
     let entries = entries.unwrap();
@@ -58,7 +60,7 @@ pub fn process_glob_command(
             }
         }
     }
-    return Some(serde_json::json!({
+    return Result::Ok(serde_json::json!({
         "entries": files
     }));
 }

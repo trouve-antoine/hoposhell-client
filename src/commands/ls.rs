@@ -1,7 +1,7 @@
 use std::os::unix::prelude::MetadataExt;
 use serde_json;
 
-use crate::{commands::file_list::{FileInfos, FileType}, constants::OutputFormat};
+use crate::{commands::{file_list::{FileInfos, FileType}, command_error::make_error}, constants::OutputFormat};
 
 use super::{request_or_response::{maybe_string, Request, make_shell_target}, file_list::print_file_list};
 
@@ -10,12 +10,11 @@ pub const COMMAND_NAME: &str = "ls";
 
 pub fn process_ls_command(
     payload: &[u8],
-) -> Option<serde_json::Value> {
+) -> Result<serde_json::Value, serde_json::Value> {
     let folder_path = maybe_string(Some(payload));
 
     if folder_path.is_none() {
-        eprintln!("No folder path provided");
-        return None;
+        return Result::Err(make_error("No folder path provided"));
     }
 
     let folder_path = folder_path.unwrap();
@@ -23,8 +22,10 @@ pub fn process_ls_command(
     let entries = std::fs::read_dir(&folder_path);
 
     if entries.is_err() {
-        eprintln!("Tried and failed to list folder: {}", &folder_path);
-        return None;
+        let error = if let Some(err) = entries.err() { err } else {
+            std::io::Error::new(std::io::ErrorKind::Other, "Unknown error")
+        };
+        return Result::Err(make_error(format!("Cannot list folder {}: {}", &folder_path, error.to_string()).as_str()));
     }
 
     let entries = entries.unwrap();
@@ -56,7 +57,7 @@ pub fn process_ls_command(
             }
         }
     }
-    return Some(serde_json::json!({
+    return Result::Ok(serde_json::json!({
         "entries": files
     }));
 }

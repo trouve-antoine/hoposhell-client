@@ -1,5 +1,7 @@
 use std::time::SystemTime;
 
+use crate::commands::command_error::make_error_bytes;
+
 use super::command_history::CommandHistory;
 use super::request_or_response::{RequestOrResponse, Response, StatusCode};
 use super::{glob, ls, download};
@@ -27,19 +29,19 @@ impl CommandProcessor {
 
                 let response_payload = match req.cmd.as_str() {
                     ls::COMMAND_NAME => match ls::process_ls_command(&req.payload) {
-                        Some(payload) => Some(payload.to_string().as_bytes().to_vec()),
-                        None => None
+                        Ok(payload) => Result::Ok(payload.to_string().as_bytes().to_vec()),
+                        Err(payload) => Result::Err(payload.to_string().as_bytes().to_vec())
                     },
                     download::COMMAND_NAME => {
                         download::process_download_command(&req.payload)
                     },
                     glob::COMMAND_NAME => match glob::process_glob_command(&req.payload) {
-                        Some(payload) => Some(payload.to_string().as_bytes().to_vec()),
-                        None => None
+                        Ok(payload) => Result::Ok(payload.to_string().as_bytes().to_vec()),
+                        Err(payload) => Result::Err(payload.to_string().as_bytes().to_vec())
                     },
                     _ => {
                         eprintln!("[{}] Got request with unknown command: {:?}", req.message_id, req.cmd);
-                        None
+                        Result::Err(make_error_bytes("Unknown command"))
                     }
                 };
 
@@ -48,21 +50,22 @@ impl CommandProcessor {
                 // eprintln!("ZLIB compression: {} -> {}", _payload.len(), _test.unwrap().len());
 
                 let payload = match response_payload {
-                    Some(payload) => match zstd::encode_all(payload.as_slice(), 4) {
+                    Ok(payload) => match zstd::encode_all(payload.as_slice(), 4) {
                         Ok(payload) => Some(payload),
                         Err(_) => {
                             eprintln!("[{}] Failed to compress response payload.", req.message_id);
                             return None;
                         }
                     },
-                    None => {
+                    Err(payload) => {
                         eprintln!("[{}] Failed to process request with command: {:?}", req.message_id, req.cmd);
+                        eprintln!("[{}] - send error: {:?}", req.message_id, String::from_utf8_lossy(&payload));
                         return Some(Response {
                             creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
                             message_id: req.message_id,
                             status_code: StatusCode::IncorrectParams,
                             cmd: req.cmd,
-                            payload: vec![]
+                            payload: payload
                         })
                     }
                 };

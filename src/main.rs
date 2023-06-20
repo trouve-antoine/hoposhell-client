@@ -5,6 +5,8 @@ mod connect;
 mod constants;
 mod populate;
 mod commands {
+    pub mod command_error;
+    /* */
     pub mod send_command_hanlder;
     pub mod request_or_response;
     pub mod command_processor;

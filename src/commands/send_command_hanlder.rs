@@ -1,5 +1,7 @@
 use std::{io::{Read, Write}, path::Path, net::TcpStream, thread};
 
+use serde_json::{Value};
+
 use crate::{
     commands::{
         request_or_response::{
@@ -260,6 +262,20 @@ fn parse_command_response_message(
                 }
                 if res.status_code != StatusCode::Ok {
                     eprintln!("[{}] Got a response with status {:?}: exit", res.message_id, res.status_code);
+                    let error_body = std::str::from_utf8(res.payload.as_slice());
+
+                    if let Ok(error_body) = error_body {
+                        let error_json: Result<Value, _> = serde_json::from_str(error_body);
+                        if let Ok(error_json) = error_json {
+                            if let Some(error) = error_json.get("error") {
+                                eprintln!("[{}] {}", res.message_id, error.as_str().unwrap());
+                                return ParseCommandResponseResult::Error;
+                            }
+                        } else {
+                            // eprintln!("[{}] Error body was: {}", res.message_id, error_body);
+                            eprintln!("[{}] {}", res.message_id, error_body);
+                        }
+                    }
                     return ParseCommandResponseResult::Error;
                 }
                 let chunk_type = res.chunk_type.clone();
