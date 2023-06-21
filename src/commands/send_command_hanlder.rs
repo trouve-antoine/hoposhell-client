@@ -1,4 +1,4 @@
-use std::{io::{Read, Write}, path::Path, net::TcpStream, thread};
+use std::{io::{Read, Write}, net::TcpStream, thread};
 
 use serde_json::{Value};
 
@@ -19,7 +19,7 @@ use crate::{
     make_random_id
 };
 
-use super::{download, ls, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
+use super::{download::{self, compute_destination}, ls, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
 
 pub fn main_command(args: Args) {
     let target_shell_id = &args.extra_args[0];
@@ -52,15 +52,21 @@ pub fn main_command(args: Args) {
         download::COMMAND_NAME | download::COMMAND_ALIAS => {
             // hopo command <shell_id> download <remote_file_path> <local_file_path>
             let remote_file_path = &args.extra_args[2];
+            let local_file_path = if args.extra_args.len() < 4 { None } else {
+                Some(String::from(&args.extra_args[3]))
+            };
+
+            let dst_path = compute_destination(remote_file_path, local_file_path);
+            if dst_path.is_none() {
+                eprintln!("Invalid destination path");
+                std::process::exit(-1);
+            }
+            let dst_path = dst_path.unwrap();
+
             req = Some(download::make_download_request(make_id, &target_shell_id, &remote_file_path));
-            process_res = Box::new(|res: Response| {
-                if args.extra_args.len() < 4 {
-                    eprintln!("Please specify the local file path");
-                    let local_path = String::from(Path::new("./").join(Path::new(&args.extra_args[2]).file_name().unwrap()).to_str().unwrap());
-                    download::process_download_response(&res.payload, &local_path);
-                } else {
-                    download::process_download_response(&res.payload, &args.extra_args[3]);
-                };
+
+            process_res = Box::new(move |res: Response| {
+                download::process_download_response(&res.payload, &dst_path);
             });
         },
         glob::COMMAND_NAME => {

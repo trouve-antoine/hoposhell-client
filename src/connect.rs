@@ -96,9 +96,11 @@ pub fn main_connect(args: Args) {
 
     let rx_cmd = Arc::clone(&rx_cmd);
     let tx_to_stream = Arc::clone(&tx_to_stream);
+    let working_dir = shellexpand::full(&args.working_dir).unwrap().to_string();
     let master_pty = run_shell(
         args.get_shell_id(),
         &args.hoposhell_folder_path,
+        &working_dir,
         &args.cmd,
         args.default_cols, args.default_rows,
         tx_to_stream, rx_cmd,
