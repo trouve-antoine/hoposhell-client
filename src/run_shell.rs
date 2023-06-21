@@ -15,6 +15,7 @@ use super::constants::{BUF_SIZE, MAX_MESSAGE_HISTORY_SIZE, WAIT_TIME_RETRY_CNX_M
 pub fn run_shell(
     shell_id: Option<&str>,
     hoposhell_folder: &String,
+    working_dir: &String,
     cmd: &String,
     cols: u16,
     rows: u16,
@@ -35,6 +36,7 @@ pub fn run_shell(
     let mut cmd = pty::CommandBuilder::new(cmd);
     let cmd_path = cmd.get_env("PATH").unwrap_or("".as_ref()).to_str().unwrap_or("");
     cmd.env("PATH", format!("{}{}{}{}bin", cmd_path, PATH_VAR_SEP, hoposhell_folder, std::path::MAIN_SEPARATOR));
+    cmd.cwd(working_dir.as_str());
     
     /* Update env vars for child shell */
     if let Some(shell_id) = shell_id {

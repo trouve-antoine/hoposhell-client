@@ -38,6 +38,8 @@ pub struct Args {
     pub default_cols: u16,
     pub default_rows: u16,
     /* */
+    pub working_dir: String,
+    /* */
     pub verbose: bool,
     /* */
     pub command_timeout: Duration,
@@ -177,7 +179,8 @@ pub fn parse_args() -> Args {
         },
         command_timeout: Duration::from_secs(60),
         extra_args,
-        format: OutputFormat::Text
+        format: OutputFormat::Text,
+        working_dir: env::current_dir().unwrap().to_str().unwrap().to_string()
     };
 
     if args.consume_extra_arg("--json") {
@@ -246,6 +249,11 @@ pub fn parse_args() -> Args {
     let command_timeout_ms_str = env::var("COMMAND_TIMEOUT");
     if let Ok(command_timeout_ms_str) = command_timeout_ms_str {
         args.command_timeout = parse_duration_from_ms_str(command_timeout_ms_str);
+    }
+    
+    let working_folder = env::var("HOPOSHELL_WORKING_FOLDER");
+    if let Ok(working_folder) = working_folder {
+        args.working_dir = working_folder;
     }
 
     return args;
