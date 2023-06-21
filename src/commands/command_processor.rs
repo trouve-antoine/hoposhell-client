@@ -4,7 +4,7 @@ use crate::commands::command_error::make_error_bytes;
 
 use super::command_history::CommandHistory;
 use super::request_or_response::{RequestOrResponse, Response, StatusCode};
-use super::{glob, ls, download};
+use super::{glob, ls, download, http};
 
 pub struct CommandProcessor {
     history: CommandHistory
@@ -38,6 +38,9 @@ impl CommandProcessor {
                     glob::COMMAND_NAME => match glob::process_glob_command(&req.payload) {
                         Ok(payload) => Result::Ok(payload.to_string().as_bytes().to_vec()),
                         Err(payload) => Result::Err(payload.to_string().as_bytes().to_vec())
+                    },
+                    http::COMMAND_NAME => {
+                        http::process_http_command(&req.payload)
                     },
                     _ => {
                         eprintln!("[{}] Got request with unknown command: {:?}", req.message_id, req.cmd);

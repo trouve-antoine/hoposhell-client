@@ -7,7 +7,7 @@ mod populate;
 mod commands {
     pub mod command_error;
     /* */
-    pub mod send_command_hanlder;
+    pub mod send_command_handler;
     pub mod request_or_response;
     pub mod command_processor;
     pub mod command_history;
@@ -20,6 +20,7 @@ mod commands {
     pub mod ls;
     pub mod download;
     pub mod glob;
+    pub mod http;
 }
 
 use rand::Rng;
@@ -32,7 +33,7 @@ use std::{
 
 use args::{Args, ArgsCommand};
 
-use crate::commands::send_command_hanlder::main_command;
+use crate::commands::send_command_handler::main_command;
 
 fn main() {
     let args = args::parse_args();

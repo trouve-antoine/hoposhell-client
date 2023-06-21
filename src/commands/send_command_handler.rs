@@ -19,7 +19,7 @@ use crate::{
     make_random_id
 };
 
-use super::{download::{self, compute_destination}, ls, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
+use super::{download::{self, compute_destination}, ls, http, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
 
 pub fn main_command(args: Args) {
     let target_shell_id = &args.extra_args[0];
@@ -75,6 +75,14 @@ pub fn main_command(args: Args) {
             req = Some(glob::make_glob_request(make_id, &target_shell_id, &glob_pattern));
             process_res = Box::new(|res: Response| {
                 glob::process_glob_response(&res.payload, args.format);
+            });
+        },
+        http::COMMAND_NAME => {
+            // hopo command <shell_id> http <verb> <url>
+            let http_args = &args.extra_args[2..];
+            req = Some(http::make_http_request(make_id, &target_shell_id, &http_args.to_vec()));
+            process_res = Box::new(|res: Response| {
+                http::process_http_response(&res.payload, args.format);
             });
         },
         _ => {

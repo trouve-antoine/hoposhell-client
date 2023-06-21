@@ -77,7 +77,7 @@ pub fn compute_destination(remote_file_path: &String, dst_path: Option<String>) 
         let is_dir = dst_path.as_os_str().to_str().unwrap().ends_with(std::path::MAIN_SEPARATOR);
 
         if is_dir {
-            /* The destination is  non existing folder: we don't create folders automatically */
+            /* The destination is a non existing folder: we don't create folders automatically */
             eprintln!("The target path is invalid: it is a non-existing folder");
             return None
         }
