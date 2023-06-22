@@ -56,7 +56,7 @@ pub fn print_file_list(response_payload: &[u8], format: OutputFormat) {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&files).unwrap());
         },
-        OutputFormat::Text => {
+        _ => {
             for file in files {
                 let v = file.to_owned();
                 let file = serde_json::from_value::<FileInfos>(v);

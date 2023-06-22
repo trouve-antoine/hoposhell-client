@@ -11,5 +11,6 @@ pub const WAIT_TIME_RETRY_CNX_MS: u64 = 100;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum OutputFormat {
     Json,
-    Text
+    Text,
+    Raw
 }

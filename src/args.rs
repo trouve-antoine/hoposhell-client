@@ -186,6 +186,10 @@ pub fn parse_args() -> Args {
     if args.consume_extra_arg("--json") {
         args.format = OutputFormat::Json;
     }
+    
+    if args.consume_extra_arg("--raw") {
+        args.format = OutputFormat::Raw;
+    }
 
     let reconnect_str = env::var("RECONNECT");
     if let Ok(reconnect_str) = reconnect_str {

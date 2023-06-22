@@ -38,35 +38,93 @@ pub fn process_http_command(
     if json_payload.is_err() {
         return Result::Err(make_error_bytes(format!("Invalid json payload: {}", json_payload.err().unwrap().to_string()).as_str()));
     }
-    let body = json_payload.unwrap();
+    let request_infos = json_payload.unwrap();
     
-    eprintln!("Got http command: {:?}", body);
+    let response = match request_infos.verb {
+        HttpVerb::GET => {
+            reqwest::blocking::get(request_infos.url.as_str())
+        },
+        HttpVerb::POST => {
+            reqwest::blocking::Client::new().post(request_infos.url.as_str())
+                .body(request_infos.body.unwrap_or("".to_string()))
+                .send()
+        },
+        _ => {
+            return Result::Err(make_error_bytes(format!("Unsupported http verb: {:?}", request_infos.verb).as_str()));
+        }
+    };
 
-    return Result::Ok(Vec::new());
+    match response {
+        Ok(response) => {
+            let contents = response.bytes();
+
+            match contents {
+                Ok(contents) => {
+                    return Result::Ok(contents.to_vec());
+                },
+                Err(_) => {
+                    return Result::Err(make_error_bytes("Cannot get response bytes"));
+                }
+            }
+        },
+        Err(_) => {
+            return Result::Err(make_error_bytes("Cannot access url"));
+        }
+    };
 }
 
-pub fn process_http_response(response_payload: &[u8], _format: OutputFormat) {
-    let payload = maybe_string(Some(response_payload));
-
-    match payload {
-        Some(payload) => {
-            eprintln!("Got http response: {:?}", payload);
-        },
-        None => {
-            eprintln!("Got invalid http response");
-        }
+pub fn process_http_response(response_payload: &[u8], format: OutputFormat) {
+    if format == OutputFormat::Raw {
+        println!("{:?}", response_payload);
+        return;
     }
+
+    let text_payload = maybe_string(Some(response_payload));
+
+    if text_payload.is_none() {
+        eprintln!("Cannot parse http payload bytes");
+        return;
+    }
+    let text_payload = text_payload.unwrap();
+
+    // let splitted_payload: Vec<&str> = text_payload.splitn(2, "\n\n").collect();
+    // if splitted_payload.len() != 2 {
+    //     eprintln!("Cannot split http payload");
+    //     return;
+    // }
+    // let body_payload = splitted_payload[1];
+
+    if format == OutputFormat::Text {
+        println!("{}", text_payload);
+        return;
+    }
+
+    if format == OutputFormat::Json {
+        let body_json = serde_json::from_str::<serde_json::Value>(&text_payload);
+        if body_json.is_err() {
+            eprintln!("Cannot parse http payload to json");
+            return;
+        }
+        let body_json = body_json.unwrap();
+        println!("{}", body_json);
+        return;
+    }
+
+    eprintln!("Unsupported output format");
+
 }
 
 pub fn make_http_request(make_id: impl Fn() -> String, shell_id: &String, args: &Vec<String>) -> Request{
     let verb = args[0].clone();
     let url = args[1].clone();
 
+    let body = if args.len() > 2 { Some(args[2].clone()) } else { None };
+
     let request_body = HttpCommandRequestBody {
         verb: serde::Deserialize::deserialize(serde_json::Value::String(verb)).unwrap(),
         url,
         headers: HashMap::new(),
-        body: None
+        body
     };
 
     let payload = serde_json::to_vec(&request_body).unwrap();
