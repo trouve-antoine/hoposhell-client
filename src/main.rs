@@ -21,7 +21,9 @@ mod commands {
     pub mod download;
     pub mod glob;
     pub mod http;
+    pub mod tcp;
 }
+pub mod forward_tcp;
 
 use rand::Rng;
 use rand::{self, distributions::Alphanumeric};
@@ -38,22 +40,25 @@ use crate::commands::send_command_handler::main_command;
 fn main() {
     let args = args::parse_args();
 
-    if args.already_connected && args.command == ArgsCommand::CONNECT {
+    if args.already_connected && args.command == ArgsCommand::Connect {
         eprintln!("Got command connect but the shell is already connected");
         std::process::exit(-1);
     }
 
     match args.command {
-        ArgsCommand::CONNECT => connect::main_connect(args),
-        ArgsCommand::SETUP => main_setup(args),
-        ArgsCommand::VERSION => {
+        ArgsCommand::Connect => connect::main_connect(args),
+        ArgsCommand::Setup => main_setup(args),
+        ArgsCommand::Version => {
             eprintln!("Hoposhell Client v{}", args.version)
         },
-        ArgsCommand::COMMAND => {
+        ArgsCommand::Command => {
             main_command(args);
         },
-        ArgsCommand::POPULATE => {
+        ArgsCommand::Populate => {
             populate::main_populate(args);
+        },
+        ArgsCommand::ForwardTcp => {
+            forward_tcp::main_forward_tcp(args);
         }
     }
 }

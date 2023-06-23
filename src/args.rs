@@ -10,11 +10,12 @@ const HOPOSHELL_FOLDER_NAME: &str = ".hoposhell";
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ArgsCommand {
-    CONNECT, // spawns a shell and connects to the server
-    SETUP, // download server and shell certificates
-    VERSION, // prints the version of the client
-    COMMAND, // runs a command on a remote shell
-    POPULATE, // populate the bin folder
+    Connect, // spawns a shell and connects to the server
+    Setup, // download server and shell certificates
+    Version, // prints the version of the client
+    Command, // runs a command on a remote shell
+    Populate, // populate the bin folder
+    ForwardTcp // forward a tcp connection
 }
 
 #[derive(Debug, Clone)]
@@ -100,7 +101,7 @@ pub fn parse_args() -> Args {
     let cmd_args: Vec<String> = env::args().collect();
 
     let mut shell_name: Option<String> = None;
-    let mut command = ArgsCommand::CONNECT;
+    let mut command = ArgsCommand::Connect;
     let mut extra_args: Vec<String> = vec![];
 
     if let Ok(shell_name_) = env::var("HOPOSHELL_SHELL_ID") {
@@ -118,25 +119,31 @@ pub fn parse_args() -> Args {
                 if cmd_args.len() > 2 {
                     shell_name = Some(cmd_args[2].clone());
                 }
-                command = ArgsCommand::CONNECT;
+                command = ArgsCommand::Connect;
             }
             "setup" => {
                 shell_name = Some(cmd_args[2].clone());
-                command = ArgsCommand::SETUP;
+                command = ArgsCommand::Setup;
             }
             "command" => {
-                command = ArgsCommand::COMMAND;
+                command = ArgsCommand::Command;
                 extra_args = cmd_args[2..].to_vec();
             }
             "version" => {
-                command = ArgsCommand::VERSION;
+                command = ArgsCommand::Version;
             }
             "populate" => {
-                command = ArgsCommand::POPULATE;
+                command = ArgsCommand::Populate;
+            },
+            "forward-tcp" => {
+                /* hopo forward-tcp <shell> <local port> <host> <remote port>  */
+                shell_name = Some(cmd_args[2].clone());
+                command = ArgsCommand::ForwardTcp;
+                extra_args = cmd_args[3..].to_vec();
             },
             _ => {
                 shell_name = Some(cmd_args[1].clone());
-                command = ArgsCommand::CONNECT;
+                command = ArgsCommand::Connect;
             }
         }
     }

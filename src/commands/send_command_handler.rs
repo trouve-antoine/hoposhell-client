@@ -1,5 +1,6 @@
 use std::{io::{Read, Write}, net::TcpStream, thread};
 
+use openssl::ssl::SslConnector;
 use serde_json::{Value};
 
 use crate::{
@@ -19,12 +20,23 @@ use crate::{
     make_random_id
 };
 
-use super::{download::{self, compute_destination}, ls, http, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
+use super::{download::{self, compute_destination}, tcp, ls, http, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
 
 pub fn main_command(args: Args) {
     let target_shell_id = &args.extra_args[0];
     let command = &args.extra_args[1];
 
+    let command_args = &args.extra_args[2..].to_vec();
+
+    return send_command(target_shell_id, command, command_args, &args);
+}
+
+pub fn send_command(
+    target_shell_id: &String,
+    command: &String,
+    command_args: &Vec<String>,
+    args: &Args
+) {
     let current_shell_id = args.get_shell_id();
     if current_shell_id.is_none() {
         eprintln!("Please specify the shell id");
@@ -43,7 +55,7 @@ pub fn main_command(args: Args) {
     match command.as_str() {
         ls::COMMAND_NAME => {
             // hopo command <shell_id> ls <folder_path>
-            let folder_path = &args.extra_args[2];
+            let folder_path = &command_args[0];
             req = Some(ls::make_ls_request(make_id, &target_shell_id, &folder_path));
             process_res = Box::new(|res: Response| {
                 ls::process_ls_response(&res.payload, args.format);
@@ -51,12 +63,12 @@ pub fn main_command(args: Args) {
         },
         download::COMMAND_NAME | download::COMMAND_ALIAS => {
             // hopo command <shell_id> download <remote_file_path> <local_file_path>
-            let remote_file_path = &args.extra_args[2];
-            let local_file_path = if args.extra_args.len() < 4 { None } else {
-                Some(String::from(&args.extra_args[3]))
+            let remote_file_path = &command_args[0];
+            let local_file_path = if command_args.len() < 2 { None } else {
+                Some(String::from(&command_args[1]))
             };
 
-            let dst_path = compute_destination(remote_file_path, local_file_path);
+            let dst_path = compute_destination(&remote_file_path, local_file_path);
             if dst_path.is_none() {
                 eprintln!("Invalid destination path");
                 std::process::exit(-1);
@@ -71,7 +83,7 @@ pub fn main_command(args: Args) {
         },
         glob::COMMAND_NAME => {
             // hopo command <shell_id> glob <pattern>
-            let glob_pattern = &args.extra_args[2];
+            let glob_pattern = &command_args[0];
             req = Some(glob::make_glob_request(make_id, &target_shell_id, &glob_pattern));
             process_res = Box::new(|res: Response| {
                 glob::process_glob_response(&res.payload, args.format);
@@ -79,10 +91,22 @@ pub fn main_command(args: Args) {
         },
         http::COMMAND_NAME => {
             // hopo command <shell_id> http <verb> <url>
-            let http_args = &args.extra_args[2..];
-            req = Some(http::make_http_request(make_id, &target_shell_id, &http_args.to_vec()));
+            req = Some(http::make_http_request(make_id, &target_shell_id, &command_args));
             process_res = Box::new(|res: Response| {
                 http::process_http_response(&res.payload, args.format);
+            });
+        },
+        tcp::COMMAND_NAME => {
+            // hopo command <shell_id> tcp host port payload
+            let host = &command_args[0];
+            let port = &command_args[1];
+            let payload = &command_args[2];
+
+            let port: u16 = port.parse().unwrap();
+            
+            req = Some(tcp::make_tcp_request(make_id, &target_shell_id, host.clone(), port, payload.clone().as_bytes().to_vec()));
+            process_res = Box::new(|res: Response| {
+                tcp::process_tcp_response(&res.payload, args.format);
             });
         },
         _ => {
@@ -93,6 +117,20 @@ pub fn main_command(args: Args) {
 
     let req = req.unwrap();
 
+    let (ssl_connector, tcp_stream) = connect_to_hoposhell(args);
+
+    if let Some(ref ssl_connector) = ssl_connector {
+        let hostname = compute_hostname(&args.server_url);
+        let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
+        handle_command_connection(&args, ssl_stream, &req, &process_res, args.verbose)
+    } else {
+        handle_command_connection(&args, tcp_stream, &req, &process_res, args.verbose)
+    };
+
+    
+}
+
+pub fn connect_to_hoposhell(args: &Args) -> (Option<SslConnector>, TcpStream) {
     if let None = args.server_crt_path {
         eprintln!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.");
         std::process::exit(-1);
@@ -120,15 +158,7 @@ pub fn main_command(args: Args) {
     }
     let tcp_stream = tcp_stream.unwrap();
 
-    if let Some(ref ssl_connector) = ssl_connector {
-        let hostname = compute_hostname(&args.server_url);
-        let ssl_stream = ssl_connector.connect(hostname, tcp_stream).unwrap();
-        handle_command_connection(&args, ssl_stream, &req, &process_res, args.verbose)
-    } else {
-        handle_command_connection(&args, tcp_stream, &req, &process_res, args.verbose)
-    };
-
-    
+    return (ssl_connector, tcp_stream);
 }
 
 fn handle_command_connection(
@@ -138,6 +168,25 @@ fn handle_command_connection(
     process_res: &impl Fn(Response),
     verbose: bool
 ) {
+    let res = send_request_and_get_response(args, &mut stream, req, verbose);
+
+    match res {
+        Ok(res) => {
+            process_res(res);
+        },
+        Err(e) => {
+            eprintln!("[{}] Unable to send request: {}", req.message_id, e);
+            std::process::exit(-1);
+        }
+    }
+}
+
+pub fn send_request_and_get_response(
+    args: &Args,
+    mut stream: impl Read + Write,
+    req: &Request,
+    verbose: bool
+) -> Result<Response, std::io::Error> {
     let header_message = Message {
         mtype: MessageTypeToStream::HEADER,
         content: Some(format!("v{}/command", args.version).as_bytes().to_vec())
@@ -163,7 +212,6 @@ fn handle_command_connection(
             Ok(_) => {},
             Err(e) => {
                 eprintln!("[{}] Unable to send command message: {}", req.message_id, e);
-                std::process::exit(-1);
             }
         }
     }
@@ -178,7 +226,7 @@ fn handle_command_connection(
     loop {
         if start_time.elapsed() > args.command_timeout {
             eprintln!("[{}] Command timeout", req.message_id);
-            std::process::exit(-1);
+            return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Command timeout"));
         }
 
         match read_messages_from_stream(&mut stream, &mut buf_str, verbose) {
@@ -193,7 +241,7 @@ fn handle_command_connection(
                         break;
                     },
                     ParseCommandResponseResult::Error => {
-                        std::process::exit(-1);
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unable to parse command response"));
                     }
                 }
             },
@@ -205,43 +253,35 @@ fn handle_command_connection(
             },
             ReadMessageResult::CannotContinue => {
                 eprint!("[{}] Got an error when reading the tcp stream.", req.message_id);
-                std::process::exit(-1);
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unable to read tcp stream"));
             }
         }
     }
 
     if all_res.len() == 0 {
         eprintln!("[{}] Got no response", req.message_id);
-        std::process::exit(-1);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Got no response"));
     };
 
-    
-    let res = Response {
+    let message_id = all_res[0].message_id.clone();
+    let compressed_payload: Vec<u8> = all_res.iter().map(|res| res.payload.clone()).into_iter().flatten().collect();
+
+    eprintln!("[{}] Total number of response chunk: {}", message_id, all_res.len());
+
+    let payload = zstd::decode_all(compressed_payload.as_slice());
+    if let Err(e) = payload {
+        eprintln!("Unable to decompress response: {}", e);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unable to decompress response"));
+    }
+    let payload = payload.unwrap();
+
+    return Ok(Response {
         creation_timestamp: all_res[0].creation_timestamp,
         cmd: all_res[0].cmd.clone(),
-        message_id: all_res[0].message_id.clone(),
+        message_id,
         status_code: all_res[0].status_code,
-        payload: all_res.iter().map(|res| res.payload.clone()).into_iter().flatten().collect()
-    };
-
-    eprintln!("[{}] Total number of response chunk: {}", res.message_id, all_res.len());
-
-    match zstd::decode_all(res.payload.as_slice()) {
-        Ok(decompressed) => {
-            // glob::process_glob_response(decompressed.as_slice());
-            process_res(Response {
-                creation_timestamp: res.creation_timestamp,
-                cmd: res.cmd,
-                message_id: res.message_id,
-                status_code: res.status_code,
-                payload: decompressed
-            });
-        },
-        Err(e) => {
-            eprintln!("Unable to decompress glob response: {}", e);
-            std::process::exit(-1);
-        }
-    }
+        payload
+    });
 }
 
 fn parse_command_response_message(
