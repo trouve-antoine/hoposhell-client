@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use crate::constants::OutputFormat;
 
@@ -42,9 +42,11 @@ pub fn process_http_command(
     
     let response = match request_infos.verb {
         HttpVerb::GET => {
+            eprintln!("GET {}", request_infos.url.as_str());
             reqwest::blocking::get(request_infos.url.as_str())
         },
         HttpVerb::POST => {
+            eprintln!("POST {}", request_infos.url.as_str());
             reqwest::blocking::Client::new().post(request_infos.url.as_str())
                 .body(request_infos.body.unwrap_or("".to_string()))
                 .send()
@@ -75,7 +77,7 @@ pub fn process_http_command(
 
 pub fn process_http_response(response_payload: &[u8], format: OutputFormat) {
     if format == OutputFormat::Raw {
-        println!("{:?}", response_payload);
+        std::io::stdout().write_all(response_payload).unwrap();
         return;
     }
 

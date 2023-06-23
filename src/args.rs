@@ -126,6 +126,9 @@ pub fn parse_args() -> Args {
                 command = ArgsCommand::Setup;
             }
             "command" => {
+                if shell_name.is_none() {
+                    shell_name = Some(cmd_args[2].clone());
+                }
                 command = ArgsCommand::Command;
                 extra_args = cmd_args[2..].to_vec();
             }
