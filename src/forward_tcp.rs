@@ -59,9 +59,9 @@ pub fn main_forward_tcp(args: Args) {
         }
         let res = res.unwrap();
 
-        eprintln!("#########################");
-        eprintln!("{}", String::from_utf8_lossy(&res.payload));
-        eprintln!("#########################");
+        // eprintln!("#########################");
+        // eprintln!("{}", String::from_utf8_lossy(&res.payload));
+        // eprintln!("#########################");
 
         if res.status_code != StatusCode::Ok {
             eprintln!("Got error status code from hoposhell server: {:?}", res.status_code);
