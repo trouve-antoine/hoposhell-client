@@ -22,6 +22,7 @@ mod commands {
     pub mod glob;
     pub mod http;
     pub mod tcp;
+    pub mod scripts;
 }
 pub mod forward_tcp;
 

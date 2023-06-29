@@ -20,7 +20,7 @@ use crate::{
     make_random_id
 };
 
-use super::{download::{self, compute_destination}, tcp, ls, http, glob, request_or_response::{Request, ChunkedRequestOrResponse}};
+use super::{download::{self, compute_destination}, tcp, ls, http, glob, scripts, request_or_response::{Request, ChunkedRequestOrResponse}};
 
 pub fn main_command(args: Args) {
     let target_shell_id = &args.extra_args[0];
@@ -107,6 +107,15 @@ pub fn send_command(
             req = Some(tcp::make_tcp_request(make_id, &target_shell_id, host.clone(), port, payload.clone().as_bytes().to_vec()));
             process_res = Box::new(|res: Response| {
                 tcp::process_tcp_response(&res.payload, args.format);
+            });
+        },
+        scripts::COMMAND_NAME => {
+            // hopo command <shell_id> tcp host port payload
+            let script_name = &command_args[0];
+            
+            req = Some(scripts::make_scripts_request(make_id, &target_shell_id, script_name.clone()));
+            process_res = Box::new(|res: Response| {
+                scripts::process_script_response(&res.payload, args.format);
             });
         },
         _ => {
