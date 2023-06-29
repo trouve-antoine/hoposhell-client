@@ -59,6 +59,7 @@ pub fn run_shell(
     let tx_to_stream_stdin = Arc::clone(&tx_to_stream);
 
     let master_stdin = master.clone();
+    let hoposhell_folder = hoposhell_folder.clone();
     let _stdin_handle = thread::spawn(move || {
         let mut commands = crate::commands::command_processor::CommandProcessor::new();
 
@@ -85,7 +86,7 @@ pub fn run_shell(
                                 crate::commands::resize::process_resize_command(&c, &master_stdin, &send_message);
                             } else {
                                 /* A generic command */
-                                if let Some(res) = commands.process_msg(&c) {
+                                if let Some(res) = commands.process_msg(&c, &hoposhell_folder) {
                                     /* consume and send the response back */
                                     eprintln!("[{}] Send response of command {:?}.", &res.message_id, res.cmd);
                                     for chunk in res.chunk() {

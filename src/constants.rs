@@ -8,6 +8,8 @@ pub const MESSAGE_PARTS_SEPARATOR: u8 = b'/';
 
 pub const WAIT_TIME_RETRY_CNX_MS: u64 = 100;
 
+pub const SCRIPTS_FOLDER_NAME: &str = "scripts";
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum OutputFormat {
     Json,

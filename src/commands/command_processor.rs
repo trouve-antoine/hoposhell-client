@@ -17,7 +17,7 @@ impl CommandProcessor {
         }
     }
 
-    pub fn process_msg(&mut self, msg: &Vec<u8>) -> Option<Response> {
+    pub fn process_msg(&mut self, msg: &Vec<u8>, hoposhell_folder: &String) -> Option<Response> {
         /* Parses and processes a command message in serialized form */
         /* (parsing is actually done inside command_history) */
         let cmd = self.history.append(msg);
@@ -46,7 +46,7 @@ impl CommandProcessor {
                         tcp::process_tcp_command(&req.payload)
                     },
                     scripts::COMMAND_NAME => {
-                        scripts::process_scripts_command(&req.payload)
+                        scripts::process_scripts_command(&req.payload, hoposhell_folder)
                     },
                     _ => {
                         eprintln!("[{}] Got request with unknown command: {:?}", req.message_id, req.cmd);
