@@ -20,7 +20,7 @@ use crate::{
     make_random_id
 };
 
-use super::{download::{self, compute_destination}, tcp, ls, http, glob, scripts, request_or_response::{Request, ChunkedRequestOrResponse}};
+use super::{download, tcp, ls, http, glob, scripts, request_or_response::{Request, ChunkedRequestOrResponse}};
 
 pub fn main_command(args: Args) {
     let target_shell_id = &args.extra_args[0];
@@ -68,17 +68,10 @@ pub fn send_command(
                 Some(String::from(&command_args[1]))
             };
 
-            let dst_path = compute_destination(&remote_file_path, local_file_path);
-            if dst_path.is_none() {
-                eprintln!("Invalid destination path");
-                std::process::exit(-1);
-            }
-            let dst_path = dst_path.unwrap();
-
             req = Some(download::make_download_request(make_id, &target_shell_id, &remote_file_path));
 
             process_res = Box::new(move |res: Response| {
-                download::process_download_response(&res.payload, &dst_path);
+                download::process_download_response(&res.payload, remote_file_path, local_file_path.clone());
             });
         },
         glob::COMMAND_NAME => {

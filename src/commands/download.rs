@@ -1,4 +1,10 @@
-use std::path::Path;
+/**
+ * hopo command <shell_id> download <remote_file_path> [local_file_path]
+ * hopo command <shell_id> download <remote_file_path> -
+ */
+
+
+use std::{path::Path, io::Write};
 
 use super::{request_or_response::{maybe_string, Request, make_shell_target}, command_error::make_error_bytes};
 
@@ -32,8 +38,26 @@ pub fn process_download_command(
     }
 }
 
-pub fn process_download_response(response_payload: &[u8], target_path: &String) {
-    match std::fs::write(target_path, response_payload) {
+pub fn process_download_response(response_payload: &[u8], remote_file_path: &String, local_file_path: Option<String>) {
+    match local_file_path.as_deref() {
+        Some("-") => {
+            std::io::stdout().write(response_payload).unwrap();
+            return;
+        },
+        _ => {
+            /* Do nothing */
+        }
+    }
+    
+    let target_path = compute_destination(&remote_file_path, local_file_path);
+    if target_path.is_none() {
+        eprintln!("Invalid destination path");
+        std::process::exit(-1);
+    }
+    let target_path = target_path.unwrap();
+
+
+    match std::fs::write(&target_path, response_payload) {
         Ok(_) => {
             eprintln!("Downloaded file to {}", target_path);
         },
