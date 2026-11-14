@@ -26,8 +26,8 @@ mod commands {
 }
 pub mod forward_tcp;
 
-use rand::Rng;
-use rand::{self, distributions::Alphanumeric};
+use rand::RngExt;
+use rand::{self, distr::Alphanumeric};
 
 use std::{
     path::Path,
@@ -114,7 +114,7 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
 }
 
 fn make_random_id(n: usize) -> String {
-    rand::thread_rng()
+    rand::rng()
         .sample_iter(&Alphanumeric)
         .take(n)
         .map(char::from)
