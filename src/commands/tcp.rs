@@ -1,4 +1,4 @@
-use std::{io::{Write, Read}, time::Duration};
+use std::{io::Write, time::Duration};
 
 use crate::constants::{OutputFormat};
 use super::{request_or_response::{Request, make_shell_target, maybe_string}, command_error::make_error_bytes};
@@ -58,8 +58,7 @@ pub fn process_tcp_command(
     /* Read response from stream */
     stream.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     
-    let mut response = vec![];
-    let read_res = stream.read_to_end(&mut response);
+    let read_res = crate::buffer_limits::read(&mut stream, "TCP response");
     
     // let mut response = vec![0; crate::constants::BUF_SIZE];
     // let read_res = stream.read(&mut response);
@@ -68,7 +67,7 @@ pub fn process_tcp_command(
         return Result::Err(make_error_bytes(format!("Error while reading from tcp stream: {}", read_res.err().unwrap().to_string()).as_str()));
     }
 
-    return Result::Ok(response);
+    return Result::Ok(read_res.unwrap());
 
 }
 

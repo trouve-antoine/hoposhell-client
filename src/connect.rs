@@ -4,9 +4,10 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
     net::{TcpStream},
-    sync::mpsc::{self, Sender, Receiver},
+    sync::mpsc,
     fs
 };
+use crate::buffer_limits::{self, Sender, Receiver};
 
 use base64::engine::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -83,11 +84,11 @@ pub fn main_connect(args: Args) {
         }
     }
 
-    let (tx_to_cmd, rx_cmd) = mpsc::channel::<Message<MessageTypeToCmd>>();
+    let (tx_to_cmd, rx_cmd) = buffer_limits::channel::<Message<MessageTypeToCmd>>();
     let tx_to_cmd = Arc::new(Mutex::new(tx_to_cmd));
     let rx_cmd = Arc::new(Mutex::new(rx_cmd));
     
-    let (tx_to_stream, rx_stream) = mpsc::channel::<Message<MessageTypeToStream>>();
+    let (tx_to_stream, rx_stream) = buffer_limits::channel::<Message<MessageTypeToStream>>();
     let tx_to_stream = Arc::new(Mutex::new(tx_to_stream));
     let rx_stream = Arc::new(Mutex::new(rx_stream));
     

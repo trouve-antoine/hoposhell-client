@@ -13,7 +13,8 @@ pub fn main_populate(args: Args) {
     std::fs::create_dir_all(&bin_folder_path).unwrap();
 
     let imgcat_path = Path::new(&bin_folder_path).join("imgcat");
-    let imgcat_contents = reqwest::blocking::get(IMGCAT_URL).unwrap().text().unwrap();
+    let imgcat_contents = crate::buffer_limits::read(
+        reqwest::blocking::get(IMGCAT_URL).unwrap(), "imgcat download").unwrap();
 
     eprintln!("💾 Download imgcat: {} -> {}", IMGCAT_URL, imgcat_path.to_str().unwrap());
     std::fs::write(&imgcat_path, imgcat_contents).unwrap();

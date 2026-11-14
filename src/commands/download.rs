@@ -30,7 +30,8 @@ pub fn process_download_command(
         return Result::Err(make_error_bytes(format!("File {} does not exist", file_path.to_str().unwrap()).as_str()));
     }
 
-    let file_contents = std::fs::read(file_path);
+    let file_contents = std::fs::File::open(file_path)
+        .and_then(|file| crate::buffer_limits::read(file, "downloaded file"));
 
     return match file_contents {
         Ok(file_contents) => Result::Ok(file_contents),

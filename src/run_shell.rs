@@ -1,9 +1,9 @@
 use std::{
     sync::{Mutex, Arc},
-    sync::mpsc::{Sender, Receiver},
     io,
     thread
 };
+use crate::buffer_limits::{self, Sender, Receiver, BufferedSize};
 
 use portable_pty as pty;
 
@@ -133,6 +133,9 @@ pub fn run_shell(
                         let delta = history_of_messages.len()-MAX_MESSAGE_HISTORY_SIZE;
                         history_of_messages.drain(0..delta);
                     }
+                    let history_bytes = history_of_messages.iter()
+                        .map(BufferedSize::buffered_size).sum();
+                    buffer_limits::growth(history_bytes, msg.buffered_size(), "shell output history");
                     history_of_messages.push(msg.clone());
                 }
 

@@ -1,4 +1,5 @@
 mod args;
+mod buffer_limits;
 mod message;
 mod run_shell;
 mod connect;
@@ -37,6 +38,7 @@ use args::{Args, ArgsCommand};
 use crate::commands::send_command_handler::main_command;
 
 fn main() {
+    buffer_limits::init();
     let args = args::parse_args();
 
     if args.already_connected && args.command == ArgsCommand::Connect {
@@ -87,8 +89,9 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     let mut login_code = String::new();
     eprintln!("Enter the login code that shows on the hoposhell GUI: ");
     std::io::stdin().read_line(&mut login_code).unwrap();
-    let credentials = reqwest::blocking::get(format!("{}/shell-credentials/confirmation/{}/{}", api_url, shell_name, login_code)).unwrap()
-        .json::<HashMap<String, String>>().unwrap();
+    let response = reqwest::blocking::get(format!("{}/shell-credentials/confirmation/{}/{}", api_url, shell_name, login_code)).unwrap();
+    let credentials = crate::buffer_limits::read(response, "credentials response").unwrap();
+    let credentials = serde_json::from_slice::<HashMap<String, String>>(&credentials).unwrap();
 
     let server_crt = &credentials["serverCrt"];
     let shell_key = &credentials["shellKey"];
