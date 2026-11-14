@@ -3,6 +3,7 @@ mod message;
 mod run_shell;
 mod connect;
 mod constants;
+mod credentials;
 mod populate;
 mod commands {
     pub mod command_error;
@@ -29,10 +30,7 @@ pub mod forward_tcp;
 use rand::RngExt;
 use rand::{self, distr::Alphanumeric};
 
-use std::{
-    path::Path,
-    collections::HashMap
-};
+use std::collections::HashMap;
 
 use args::{Args, ArgsCommand};
 
@@ -82,7 +80,7 @@ fn main_setup(args: Args) {
     }
 }
 
-fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String, _hoposhell_folder_path: String) {
+fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: String, shell_key_path: String, hoposhell_folder_path: String) {
     eprintln!("🪙 {}/shell-credentials/request/{}", api_url, shell_name);
     reqwest::blocking::get(format!("{}/shell-credentials/request/{}", api_url, shell_name)).unwrap();
     
@@ -95,22 +93,17 @@ fn get_shell_credentials(shell_name: String, api_url: String, server_crt_path: S
     let server_crt = &credentials["serverCrt"];
     let shell_key = &credentials["shellKey"];
 
-    let server_crt_folder_path = Path::new(&server_crt_path).parent().unwrap();
-    if !server_crt_folder_path.exists() {
-        eprintln!("💾 Create folder {}", server_crt_folder_path.to_str().unwrap());
-        std::fs::create_dir_all(server_crt_folder_path).unwrap();
-    }
+    credentials::prepare_home(std::path::Path::new(&hoposhell_folder_path))
+        .expect("Unable to secure Hoposhell credentials folder");
+
     eprintln!("💾 Write server crt in file {}", server_crt_path);
-    std::fs::write(&server_crt_path, server_crt).expect("Unable to write server crt file");
+    credentials::write(std::path::Path::new(&server_crt_path), server_crt.as_bytes())
+        .expect("Unable to securely write server crt file");
     
     
-    let shell_key_folder_path = Path::new(&shell_key_path).parent().unwrap();
-    if !shell_key_folder_path.exists() {
-        eprintln!("💾 Create folder {}", shell_key_folder_path.to_str().unwrap());
-        std::fs::create_dir_all(shell_key_folder_path).unwrap();
-    }
     eprintln!("💾 Write shell key in file {}", shell_key_path);
-    std::fs::write(&shell_key_path, shell_key).expect("Unable to write shell key file");
+    credentials::write(std::path::Path::new(&shell_key_path), shell_key.as_bytes())
+        .expect("Unable to securely write shell key file");
 }
 
 fn make_random_id(n: usize) -> String {
