@@ -277,7 +277,6 @@ mod tests {
                     let mut history = crate::commands::command_history::CommandHistory::new();
                     for id in 0..300 {
                         let request = ChunkedRequest {
-                            creation_timestamp: 0,
                             cmd: "download".into(),
                             message_id: id.to_string(),
                             target: "shell:test".into(),
