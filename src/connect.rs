@@ -4,16 +4,15 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
     net::{TcpStream},
-    sync::mpsc::{self, Sender, Receiver},
+    sync::mpsc,
     fs
 };
+use crate::buffer_limits::{self, Sender, Receiver};
 
 use base64::engine::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
 use regex::Regex;
-
-use expect_exit::{Expected};
 
 use openssl::{ssl::{self, SslConnector, SslFiletype}};
 use crate::{commands::resize::make_size_message, constants::WAIT_TIME_RETRY_CNX_MS};
@@ -39,22 +38,27 @@ pub fn make_ssl_conector(server_crt_path: &String, shell_key_path: &String, veri
 
     let mut ssl_builder = ssl::SslConnector::builder(ssl::SslMethod::tls_client()).unwrap();
     
-    ssl_builder.set_ca_file(&server_crt_path).expect_or_exit(||
-        format!("Unable to load Hoposhell server certificate at {}. You might need to run command `hopo setup`.", &server_crt_path)
-    );
+    ssl_builder.set_ca_file(&server_crt_path).unwrap_or_else(|_| {
+        exit_with_error(format_args!("Unable to load Hoposhell server certificate at {}. You might need to run command `hopo setup`.", server_crt_path))
+    });
     
-    ssl_builder.set_certificate_file(&shell_key_path, SslFiletype::PEM).expect_or_exit(||
-        format!("Unable to load shell certificate at {}. You might need to run command `hopo setup`.", &shell_key_path)
-    );
-    ssl_builder.set_private_key_file(&shell_key_path, SslFiletype::PEM).expect_or_exit(||
-        format!("Unable to load shell private key at {}. You might need to run command `hopo setup`", &shell_key_path)
-    );
+    ssl_builder.set_certificate_file(&shell_key_path, SslFiletype::PEM).unwrap_or_else(|_| {
+        exit_with_error(format_args!("Unable to load shell certificate at {}. You might need to run command `hopo setup`.", shell_key_path))
+    });
+    ssl_builder.set_private_key_file(&shell_key_path, SslFiletype::PEM).unwrap_or_else(|_| {
+        exit_with_error(format_args!("Unable to load shell private key at {}. You might need to run command `hopo setup`", shell_key_path))
+    });
 
     if !verify_crt {
         eprintln!("!! I will not verify the server CRT");
         ssl_builder.set_verify(ssl::SslVerifyMode::NONE);
     }
     return ssl_builder.build();
+}
+
+fn exit_with_error(message: std::fmt::Arguments<'_>) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
 }
 
 pub fn compute_hostname(server_url: &String) -> &str {
@@ -83,11 +87,11 @@ pub fn main_connect(args: Args) {
         }
     }
 
-    let (tx_to_cmd, rx_cmd) = mpsc::channel::<Message<MessageTypeToCmd>>();
+    let (tx_to_cmd, rx_cmd) = buffer_limits::channel::<Message<MessageTypeToCmd>>();
     let tx_to_cmd = Arc::new(Mutex::new(tx_to_cmd));
     let rx_cmd = Arc::new(Mutex::new(rx_cmd));
     
-    let (tx_to_stream, rx_stream) = mpsc::channel::<Message<MessageTypeToStream>>();
+    let (tx_to_stream, rx_stream) = buffer_limits::channel::<Message<MessageTypeToStream>>();
     let tx_to_stream = Arc::new(Mutex::new(tx_to_stream));
     let rx_stream = Arc::new(Mutex::new(rx_stream));
     
@@ -117,8 +121,12 @@ pub fn main_connect(args: Args) {
 
     let ssl_connector = if args.use_ssl {
         Some(make_ssl_conector(
-            &args.server_crt_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location.")),
-            &args.shell_key_path.expect_or_exit(|| format!("Please specify env var HOPOSHELL_SHELL_KEY, or specify the shell_id parameter of the connect command.")),
+            &args.server_crt_path.unwrap_or_else(|| {
+                exit_with_error(format_args!("Please specify env var HOPOSHELL_SERVER_CRT, or run `hopo setup` to download it to the default location."))
+            }),
+            &args.shell_key_path.unwrap_or_else(|| {
+                exit_with_error(format_args!("Please specify env var HOPOSHELL_SHELL_KEY, or specify the shell_id parameter of the connect command."))
+            }),
             args.verify_crt
         ))
     } else {

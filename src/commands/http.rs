@@ -58,11 +58,11 @@ pub fn process_http_command(
 
     match response {
         Ok(response) => {
-            let contents = response.bytes();
+            let contents = crate::buffer_limits::read(response, "HTTP response");
 
             match contents {
                 Ok(contents) => {
-                    return Result::Ok(contents.to_vec());
+                    return Result::Ok(contents);
                 },
                 Err(_) => {
                     return Result::Err(make_error_bytes("Cannot get response bytes"));

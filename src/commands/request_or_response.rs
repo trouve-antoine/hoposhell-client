@@ -90,7 +90,6 @@ impl ChunkType {
 }
 
 pub struct ChunkedRequest {
-    pub creation_timestamp: u64,
     pub cmd: String,
     pub message_id: String,
     pub target: String,
@@ -137,7 +136,6 @@ impl Request {
 
         for chunk in self.payload.chunks(COMMAND_PAYLOAD_SIZE) {
             all_chunked_requests.push(ChunkedRequest {
-                creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
                 cmd: self.cmd.clone(),
                 message_id: self.message_id.clone(),
                 target: self.target.clone(),
@@ -290,7 +288,6 @@ impl ChunkedRequestOrResponse {
         match req_or_res.unwrap() {
             ReqOrRes::Req => {
                 ChunkedRequestOrResponse::Request(ChunkedRequest {
-                    creation_timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
                     cmd: cmd.unwrap(),
                     message_id: message_id.unwrap(),
                     target: target_or_status.unwrap(),
@@ -344,7 +341,6 @@ mod tests {
         assert_eq!(chunked_reqs.len(), 1);
         let first_chunk = &chunked_reqs[0];
 
-        assert_ne!(first_chunk.creation_timestamp, 0);
         assert_eq!(first_chunk.cmd, "cmd");
         assert_eq!(first_chunk.message_id, "42");
         assert_eq!(first_chunk.target, "shell:42");
@@ -367,7 +363,6 @@ mod tests {
         let first_chunk = &chunked_reqs[0];
         let second_chunk = &chunked_reqs[1];
 
-        assert_eq!(first_chunk.creation_timestamp, second_chunk.creation_timestamp);
         assert_eq!(first_chunk.cmd, second_chunk.cmd);
         assert_eq!(first_chunk.message_id, second_chunk.message_id);
         assert_eq!(first_chunk.target, second_chunk.target);

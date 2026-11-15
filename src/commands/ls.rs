@@ -27,11 +27,16 @@ pub fn process_ls_command(
     let glob_res = glob_res.unwrap();
 
     let mut files = vec![];
+    let mut buffered_bytes = 0;
     for entry in glob_res {
         match entry {
             Ok(path) => {
                 match path.metadata() {
                     Ok(infos) => {
+                        buffered_bytes = crate::buffer_limits::growth(buffered_bytes,
+                            std::mem::size_of::<FileInfos>() + path.as_os_str().len(),
+                            "directory listing");
+                        files.reserve_exact(1);
                         files.push(FileInfos::from_metadata(infos, path.into_os_string().into_string().unwrap()));  
                     },
                     Err(_) => {

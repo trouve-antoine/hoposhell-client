@@ -220,6 +220,7 @@ pub fn send_request_and_get_response(
 
     let mut buf_str = String::from("");
     let mut all_res: Vec<ChunkedResponse> = vec![];
+    let mut buffered_response_bytes = 0;
     let mut start_time = std::time::Instant::now();
 
     eprint!("Recieved: 0 bytes\r");
@@ -234,7 +235,7 @@ pub fn send_request_and_get_response(
         match read_messages_from_stream(&mut stream, &mut buf_str, verbose) {
             ReadMessageResult::Ok(messages) => {
                 start_time = std::time::Instant::now();
-                match parse_command_response_message(&req, &messages, &mut all_res) {
+                match parse_command_response_message(&req, &messages, &mut all_res, &mut buffered_response_bytes) {
                     ParseCommandResponseResult::CanContinue => {
                         total_bytes_received += messages.iter().fold(0, |acc, msg| acc + msg.content.as_ref().unwrap().len());
                         eprint!("Recieved: {} bytes\r", total_bytes_received);
@@ -266,11 +267,14 @@ pub fn send_request_and_get_response(
     };
 
     let message_id = all_res[0].message_id.clone();
-    let compressed_payload: Vec<u8> = all_res.iter().map(|res| res.payload.clone()).into_iter().flatten().collect();
+    let mut compressed_payload = Vec::new();
+    for res in &all_res {
+        crate::buffer_limits::append(&mut compressed_payload, &res.payload, "compressed response");
+    }
 
     eprintln!("[{}] Total number of response chunk: {}", message_id, all_res.len());
 
-    let payload = zstd::decode_all(compressed_payload.as_slice());
+    let payload = decompress(&compressed_payload);
     if let Err(e) = payload {
         eprintln!("Unable to decompress response: {}", e);
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unable to decompress response"));
@@ -289,7 +293,8 @@ pub fn send_request_and_get_response(
 fn parse_command_response_message(
     req: &Request,
     messages: &Vec<Message<MessageTypeToCmd>>,
-    all_res: &mut Vec<ChunkedResponse>
+    all_res: &mut Vec<ChunkedResponse>,
+    buffered_response_bytes: &mut usize,
 ) -> ParseCommandResponseResult {
     
     for message in messages.iter() {
@@ -335,6 +340,11 @@ fn parse_command_response_message(
                     return ParseCommandResponseResult::Error;
                 }
                 let chunk_type = res.chunk_type.clone();
+                let size = std::mem::size_of::<ChunkedResponse>() + res.payload.len()
+                    + res.message_id.len() + res.cmd.len();
+                *buffered_response_bytes = crate::buffer_limits::growth(
+                    *buffered_response_bytes, size, "response chunks");
+                all_res.reserve_exact(1);
                 all_res.push(res);
                 if chunk_type == ChunkType::Last {
                     return ParseCommandResponseResult::ReachedLastChunk;
@@ -343,4 +353,47 @@ fn parse_command_response_message(
         }
     }
     return ParseCommandResponseResult::CanContinue;
+}
+
+fn decompress(payload: &[u8]) -> std::io::Result<Vec<u8>> {
+    let mut decoder = zstd::stream::read::Decoder::with_buffer(payload)?;
+    // Prevent a small compressed frame from requesting a huge native history window.
+    let window_log = crate::buffer_limits::limit().ilog2().min(31);
+    decoder.window_log_max(window_log)?;
+    crate::buffer_limits::read(decoder, "decompressed response")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounded_decompression_preserves_valid_responses() {
+        let payload = b"command response";
+        let compressed = zstd::encode_all(&payload[..], 4).unwrap();
+        assert_eq!(decompress(&compressed).unwrap(), payload);
+    }
+
+    #[test]
+    fn decompression_exit_probe() {
+        if std::env::var_os("HOPOSHELL_TEST_DECOMPRESSION").is_some() {
+            let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 4).unwrap();
+            encoder.window_log(20).unwrap();
+            encoder.write_all(&vec![b'a'; 1024 * 1024 + 1]).unwrap();
+            let compressed = encoder.finish().unwrap();
+            let _ = decompress(&compressed).unwrap();
+            panic!("oversized decompression did not exit");
+        }
+    }
+
+    #[test]
+    fn oversized_decompression_exits() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "commands::send_command_handler::tests::decompression_exit_probe", "--nocapture"])
+            .env("HOPOSHELL_TEST_DECOMPRESSION", "1")
+            .env("HOPOSHELL_MAX_BUFFER_MB", "1")
+            .output().unwrap();
+        assert_eq!(output.status.code(), Some(1), "{:?}", output);
+        assert!(String::from_utf8_lossy(&output.stderr).contains("decompressed response"));
+    }
 }

@@ -53,18 +53,27 @@ pub fn process_scripts_command(
     eprintln!("Executing script: {}", script_path.to_str().unwrap());
     
     /* Execute script and get stdout */
-    let script_cmd = std::process::Command::new(script_path).output();
+    let script_cmd = std::process::Command::new(script_path)
+        .stdout(std::process::Stdio::piped())
+        // stderr was previously captured but never returned or displayed.
+        .stderr(std::process::Stdio::null())
+        .spawn();
     if let Err(e) = script_cmd {
         return Result::Err(make_error_bytes_with_prefix(vec![0,0,0,1], format!("Error while executing script: {}", e.to_string()).as_str()));
     }
-    let script_cmd = script_cmd.unwrap();
-    let mut output = script_cmd.stdout;
-    let code = script_cmd.status.code().unwrap_or_else(|| {
-        if script_cmd.status.success() { 0 } else { 1 }
+    let mut script_cmd = script_cmd.unwrap();
+    let output = crate::buffer_limits::read(script_cmd.stdout.take().unwrap(), "script output");
+    let status = script_cmd.wait();
+    let (output, status) = match (output, status) {
+        (Ok(output), Ok(status)) => (output, status),
+        _ => return Err(make_error_bytes_with_prefix(vec![0,0,0,1], "Unable to read script output or wait for script")),
+    };
+    let code = status.code().unwrap_or_else(|| {
+        if status.success() { 0 } else { 1 }
     });
     let mut response = vec![];
-    response.append(&mut code.to_ne_bytes().to_vec());
-    response.append(&mut output);
+    crate::buffer_limits::append(&mut response, &code.to_ne_bytes(), "script response");
+    crate::buffer_limits::append(&mut response, &output, "script response");
 
     return Result::Ok(response);
 

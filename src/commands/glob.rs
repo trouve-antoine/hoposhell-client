@@ -32,10 +32,15 @@ pub fn process_glob_command(
     let entries = entries.unwrap();
 
     let mut files = vec![];
+    let mut buffered_bytes = 0;
     for entry in entries {
         if let Ok(entry) = entry {
             match entry.metadata() {
                 Ok(infos) => {
+                    buffered_bytes = crate::buffer_limits::growth(buffered_bytes,
+                        std::mem::size_of::<FileInfos>() + entry.as_os_str().len(),
+                        "glob listing");
+                    files.reserve_exact(1);
                     files.push(FileInfos {
                         name: match entry.as_path().to_str() {
                             Some(path) => String::from(path),

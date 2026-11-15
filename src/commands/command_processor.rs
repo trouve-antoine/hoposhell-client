@@ -29,15 +29,15 @@ impl CommandProcessor {
 
                 let response_payload = match req.cmd.as_str() {
                     ls::COMMAND_NAME => match ls::process_ls_command(&req.payload) {
-                        Ok(payload) => Result::Ok(payload.to_string().as_bytes().to_vec()),
-                        Err(payload) => Result::Err(payload.to_string().as_bytes().to_vec())
+                        Ok(payload) => Result::Ok(serialize_json(&payload)),
+                        Err(payload) => Result::Err(serialize_json(&payload))
                     },
                     download::COMMAND_NAME => {
                         download::process_download_command(&req.payload)
                     },
                     glob::COMMAND_NAME => match glob::process_glob_command(&req.payload) {
-                        Ok(payload) => Result::Ok(payload.to_string().as_bytes().to_vec()),
-                        Err(payload) => Result::Err(payload.to_string().as_bytes().to_vec())
+                        Ok(payload) => Result::Ok(serialize_json(&payload)),
+                        Err(payload) => Result::Err(serialize_json(&payload))
                     },
                     http::COMMAND_NAME => {
                         http::process_http_command(&req.payload)
@@ -59,7 +59,7 @@ impl CommandProcessor {
                 // eprintln!("ZLIB compression: {} -> {}", _payload.len(), _test.unwrap().len());
 
                 let payload = match response_payload {
-                    Ok(payload) => match zstd::encode_all(payload.as_slice(), 4) {
+                    Ok(payload) => match compress(&payload) {
                         Ok(payload) => Some(payload),
                         Err(_) => {
                             eprintln!("[{}] Failed to compress response payload.", req.message_id);
@@ -111,4 +111,18 @@ impl CommandProcessor {
             }
         }
     }
+}
+
+fn serialize_json(value: &serde_json::Value) -> Vec<u8> {
+    let mut writer = crate::buffer_limits::Writer::new("JSON response");
+    serde_json::to_writer(&mut writer, value).unwrap();
+    writer.into_inner()
+}
+
+fn compress(payload: &[u8]) -> std::io::Result<Vec<u8>> {
+    use std::io::Write;
+    let mut encoder = zstd::stream::write::Encoder::new(
+        crate::buffer_limits::Writer::new("compressed response"), 4)?;
+    encoder.write_all(payload)?;
+    Ok(encoder.finish()?.into_inner())
 }

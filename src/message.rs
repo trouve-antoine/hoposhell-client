@@ -18,7 +18,15 @@ pub struct Message<T> {
     pub content: Option<Vec<u8>>
 }
 
+impl<T> crate::buffer_limits::BufferedSize for Message<T> {
+    fn buffered_size(&self) -> usize {
+        std::mem::size_of::<Self>() + self.content.as_ref().map_or(0, Vec::capacity)
+    }
+}
+
 pub fn separate_messages(buffer: &mut String, new_data: &[u8; BUF_SIZE], n: usize) -> Vec<Message<MessageTypeToCmd>> {
+    crate::buffer_limits::growth(buffer.len(), n, "incoming protocol buffer");
+    buffer.reserve_exact(n);
     buffer.push_str(std::str::from_utf8(&new_data[..n]).unwrap());
             
     let buffer_copy = buffer.clone();
